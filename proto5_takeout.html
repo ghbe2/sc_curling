@@ -117,10 +117,19 @@ const CONFIG = {
   PUSH_START_THRESH: 12, // 最深点からこのpx分だけ前へ戻したら「押し出し」開始とみなす(狙い・基礎パワー固定)
   REDRAW_THRESH: 10,     // 押し出し中に最深点よりこのpx分深く引き直したら「引き」に戻る(狙い直し可能)
   MIN_PUSH_DIST: 15,     // 押し出しがこの距離未満のままのリリースは投げない(=引いて放しただけでは飛ばない)
-  PUSH_SOFT_RANGE: 240,  // 押し出し距離がこの長さでパワー係数が最小になる(px)
-  PUSH_MIN_COEF: 0.15,   // 最長押し出し時のパワー係数(15%)。短い押し出し≒1.0(強)、長いほどゆっくり
-  DRAW_TO_SPEED_SCALE: 0.25, // 引き距離(px)→基礎初速(px/frame)。0.5→0.25(10倍は出すぎたので5倍へ)
-  MAX_THROW_SPEED: 30,   // 基礎初速の上限(px/frame)。120px引き切りで到達
+  PUSH_SOFT_RANGE: 320,  // 押し出し距離がこの長さでパワー係数が最小になる(px)。240→320:
+                          // 自然な押し出し(100px前後)で係数が下がりすぎないように緩和
+  PUSH_MIN_COEF: 0.4,    // 最長押し出し時のパワー係数。0.15→0.4:実機で「ほぼ手前に落ちる」の主因のひとつ。
+                          // 長い押し出しでも最低4割は出るようにして「ゆっくり=死ぬ」を防ぐ
+  DRAW_TO_SPEED_SCALE: 0.5, // 引き距離(px)→基礎初速(px/frame)。0.25→0.5:ランチャーが画面最下部にあるため
+                          // 下に引けるスペースが実機では60〜80px程度しかなく、0.25では基礎パワーが
+                          // 上限の半分にも届かなかった。60〜80pxの引きで上限に達するよう再調整
+  MAX_THROW_SPEED: 40,   // 基礎初速の上限(px/frame)。30→40:摩擦で盤中央到達時に約半分まで減速するため、
+                          // 中央での衝突速度25前後=重い一撃が出るよう引き上げ(80px引き切りで到達)
+  MIN_THROW_SPEED: 12,   // 発射される最低速度(px/frame)。新設:どんなに弱い投げでも盤まで届くことを保証
+                          // (弱い投げ=盤の手前側に置くガードショットになる)。
+                          // 直進なら10で縁に届くが、最低回転のドリフトで経路が伸びると僅かに届かない
+                          // ケースをシミュレーションで確認したため、余裕を持たせて12
   FLICK_WINDOW_MS: 120,  // リリース直前、回転判定に使う時間窓
   FLICK_CURVE_SCALE: 60, // 横移動量(px)→curve値への変換係数
   FLICK_CURVE_SIGN: 1,   // フリック方向と回転方向の対応(+1/-1)。逆に感じたら-1へ
@@ -251,13 +260,25 @@ function updateAim(px, py) {
   const dist = Math.hypot(dx, dy);
 
   if (a.state === "draw") {
-    if (dist > CONFIG.AIM_DEADZONE) {
-      // 押し出し開始判定:最深点より一定以上「浅く」なった=前へ戻し始めた
-      if (a.peakDraw > CONFIG.AIM_DEADZONE && (a.peakDraw - dist) > CONFIG.PUSH_START_THRESH) {
+    if (a.peakDraw <= CONFIG.AIM_DEADZONE) {
+      // まだ狙いが確立していない:デッドゾーンを出たら引き開始
+      if (dist > CONFIG.AIM_DEADZONE) {
+        a.aimDirX = -dx / dist;
+        a.aimDirY = -dy / dist;
+        a.drawDist = dist;
+        a.peakDraw = dist;
+      }
+    } else {
+      // 狙い確立後は「現在の狙いに対する後方成分」で引き/押しを判定する。
+      // 単純なアンカー距離で判定すると、押し出しがアンカーを越えて前側に出た瞬間に
+      // 「逆向きの深い引き」と誤認して狙いが反転するバグがあった(引きが浅く
+      // 押し出しが長い、実機で自然な操作ほど踏む)ため、符号付き射影に変更
+      const backProj = -(dx * a.aimDirX + dy * a.aimDirY); // 後ろ側が正
+      if (a.peakDraw - backProj > CONFIG.PUSH_START_THRESH) {
         a.state = "push";
-        a.pushDist = a.peakDraw - dist;
-      } else {
-        // 引き中:狙い=引きの逆方向(左右に動かせば狙いが変わる)、引き距離を更新
+        a.pushDist = Math.max(0, a.peakDraw - backProj);
+      } else if (dist > CONFIG.AIM_DEADZONE && backProj > 0) {
+        // 後ろ側で引き続けている:狙い(左右調整)と引き距離を更新
         a.aimDirX = -dx / dist;
         a.aimDirY = -dy / dist;
         a.drawDist = dist;
@@ -305,9 +326,9 @@ function finalizeAim(aim, px, py) {
     curve = sign * CONFIG.CURVE_MIN;
   }
 
-  // パワー:基礎(引き)×押し出し係数
+  // パワー:基礎(引き)×押し出し係数。下限MIN_THROW_SPEEDを保証(必ず盤まで届く)
   const base = clamp(aim.peakDraw * CONFIG.DRAW_TO_SPEED_SCALE, 0, CONFIG.MAX_THROW_SPEED);
-  const speed = base * pushCoef(aim.pushDist);
+  const speed = clamp(base * pushCoef(aim.pushDist), CONFIG.MIN_THROW_SPEED, CONFIG.MAX_THROW_SPEED);
 
   return { dirX: aim.aimDirX, dirY: aim.aimDirY, curve, speed };
 }
