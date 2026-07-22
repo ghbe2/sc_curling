@@ -974,8 +974,8 @@ function drawPredictedShotPath(aim, color) {
   const guideDistance = guideLen / view.scale;
   const launch = launcherPos();
 
-  // 投球本体と同じ順序・式で仮想ストーンを進める。停止位置を隠すため、
-  // 停止後だけはその時点の進行方向へ残りのガイドを直線で延長する。
+  // 投球本体と同じ順序・式で、目立った減速が始まるまで仮想ストーンを進める。
+  // その後は停止方向ではなく、滑走区間で得た曲率を保って同じカーブを延長する。
   const makeBoundary = (side) => {
     const curve = curveMag * side;
     const initialSpeed = throwSpeedFromPower(CONFIG.MAX_THROW_SPEED, coef) * (mods.speedMult ?? 1);
@@ -983,6 +983,7 @@ function drawPredictedShotPath(aim, color) {
     let vx = aim.aimDirX * initialSpeed, vy = aim.aimDirY * initialSpeed;
     let turned = 0, traveled = 0;
     let lastDirX = aim.aimDirX, lastDirY = aim.aimDirY;
+    let turnPerDistance = 0;
     const frictionMult = mods.frictionMult ?? 1;
     const dt = CONFIG.TIME_SCALE * 0.5;
     const points = [toScreen(x, y)];
@@ -991,8 +992,9 @@ function drawPredictedShotPath(aim, color) {
       if (speed < CONFIG.SETTLE_SPEED) break;
       lastDirX = vx / speed; lastDirY = vy / speed;
       const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
+      let dTheta = 0;
       if (Math.abs(turned) < CONFIG.CURVE_MAX_ANGLE) {
-        const dTheta = CONFIG.CURVE_STRENGTH * bendFromSpin(curve) * slow * dt * (mods.pathCurveMult ?? 1);
+        dTheta = CONFIG.CURVE_STRENGTH * bendFromSpin(curve) * slow * dt * (mods.pathCurveMult ?? 1);
         const c = Math.cos(dTheta), sn = Math.sin(dTheta);
         const nextVx = vx * c - vy * sn;
         const nextVy = vx * sn + vy * c;
@@ -1011,13 +1013,29 @@ function drawPredictedShotPath(aim, color) {
       const dx = vx * dt, dy = vy * dt;
       const stepDistance = Math.hypot(dx, dy);
       x += dx; y += dy; traveled += stepDistance;
+      if (stepDistance > 0.0001 && dTheta !== 0) turnPerDistance = dTheta / stepDistance;
       if (step % 5 === 0) points.push(toScreen(x, y));
+      if (step > 12 && postSpeed <= initialSpeed * 0.65) break;
     }
     if (traveled < guideDistance) {
-      // 間引き描画の最終点ではなく、停止直前の正確な座標を入れてから接線延長する。
+      // 滑走区間の最終点から、同じ曲率を保った円弧として画面奥まで延長する。
       points.push(toScreen(x, y));
-      const remaining = guideDistance - traveled;
-      x += lastDirX * remaining; y += lastDirY * remaining;
+      let remaining = guideDistance - traveled;
+      let heading = Math.atan2(lastDirY, lastDirX);
+      const segmentLength = Math.max(2, guideDistance / 180);
+      while (remaining > 0.001) {
+        const distance = Math.min(segmentLength, remaining);
+        if (turnPerDistance !== 0 && Math.abs(turned) < CONFIG.CURVE_MAX_ANGLE) {
+          const remainingTurn = Math.max(0, CONFIG.CURVE_MAX_ANGLE - Math.abs(turned));
+          const extensionTurn = Math.sign(turnPerDistance) * Math.min(Math.abs(turnPerDistance * distance), remainingTurn);
+          heading += extensionTurn;
+          turned += extensionTurn;
+        }
+        x += Math.cos(heading) * distance;
+        y += Math.sin(heading) * distance;
+        remaining -= distance;
+        points.push(toScreen(x, y));
+      }
     }
     points.push(toScreen(x, y));
     return points;
