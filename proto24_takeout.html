@@ -5,9 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>しゅがけカーリング サバイバル PROTO24</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   html, body {
     margin: 0; padding: 0;
-    background: #1c1c22;
+    background-color: #fce4ec;
+    background-image:
+      linear-gradient(90deg, rgba(255,255,255,0.42) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,0.42) 1px, transparent 1px);
+    background-size: 20px 20px;
     overflow: hidden;
     touch-action: none;
     -webkit-user-select: none;
@@ -18,8 +23,8 @@
   #hud {
     position: fixed; top: 0; left: 0;
     padding: 8px 10px;
-    color: #e8e4dc;
-    font-family: system-ui, sans-serif;
+    color: #2b1f24;
+    font-family: 'DotGothic16', system-ui, sans-serif;
     font-size: 12px;
     display: flex; align-items: center; gap: 10px;
     pointer-events: none;
@@ -30,15 +35,15 @@
     display: flex; gap: 4px;
   }
   .btn {
-    background: #34343e; color: #e8e4dc;
-    border: 1px solid #4c4c58; border-radius: 6px;
+    background: rgba(255,255,255,0.96); color: #e91e63;
+    border: 2px solid #f48fb1; border-radius: 10px;
     padding: 5px 8px; font-size: 10px;
     font-family: inherit;
     pointer-events: auto;
   }
   .btn.active { background: #52526a; border-color: #7878a0; }
   .btn:active { background: #46465a; }
-  #resetBtn { background: #4a3838; border-color: #6a4c4c; }
+  #resetBtn { background: rgba(255,255,255,0.96); border-color: #f48fb1; }
   #resetBtn:active { background: #5c4646; }
   #handBar {
     position: fixed; right: 6px; top: calc(75% - 105px);
@@ -50,22 +55,22 @@
   #handBar.hidden { opacity: 0; pointer-events: none; transform: translateX(18px); }
   .handCard {
     min-height: 48px; padding: 5px 3px;
-    border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
-    color: #f7f3ea; background: rgba(38,38,48,0.9);
+    border: 2px solid #f48fb1; border-radius: 10px;
+    color: #2b1f24; background: rgba(255,255,255,0.96);
     font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.2;
     touch-action: manipulation;
   }
   .handCard .icon { display: block; font-size: 17px; margin-bottom: 2px; }
   .handCard .trait { display: block; font-size: 8px; opacity: 0.62; margin-top: 2px; }
   .handCard.selected {
-    border-color: #ffd67a; background: rgba(92,72,42,0.95);
-    box-shadow: 0 0 0 2px rgba(255,214,122,0.25);
+    border-color: #e91e63; background: #fff0f5;
+    box-shadow: 0 0 0 2px rgba(233,30,99,0.2), 0 5px 16px rgba(80,30,50,0.16);
   }
   #chainToast {
     position: fixed; left: 50%; top: 26%;
     transform: translate(-50%, -50%) scale(0.8);
-    color: #ffd67a;
-    font-family: system-ui, sans-serif;
+    color: #e91e63;
+    font-family: 'DotGothic16', system-ui, sans-serif;
     font-weight: 700;
     font-size: 22px;
     text-shadow: 0 2px 8px rgba(0,0,0,0.6);
@@ -77,7 +82,7 @@
   #hint {
     position: fixed; bottom: 8px; left: 6px; right: 86px;
     text-align: center;
-    color: rgba(232, 228, 220, 0.4);
+    color: rgba(43,31,36,0.55);
     font-family: system-ui, sans-serif;
     font-size: 11px;
     pointer-events: none;
@@ -104,17 +109,18 @@
   #scorePanel {
     display: grid; grid-template-columns: repeat(2, auto); gap: 3px 12px;
     padding: 7px 9px; border-radius: 8px;
-    color: rgba(238,235,228,0.82); background: rgba(28,28,34,0.72);
-    border: 1px solid rgba(255,255,255,0.09);
-    font: 10px/1.35 system-ui, sans-serif;
+    color: #2b1f24; background: rgba(255,255,255,0.96);
+    border: 2px solid #f48fb1;
+    box-shadow: 0 5px 16px rgba(80,30,50,0.14);
+    font: 10px/1.35 'DotGothic16', system-ui, sans-serif;
     pointer-events: none;
   }
-  #scorePanel .scoreValue { color: #ffd67a; font-weight: 700; margin-left: 4px; }
+  #scorePanel .scoreValue { color: #e91e63; font-weight: 700; margin-left: 4px; }
   #scoreTotalRow { grid-column: 1 / -1; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.1); }
   #fastForwardBtn {
     width: 100%; margin-top: 5px; padding: 7px 8px;
-    color: #d8f4ff; background: rgba(40,61,72,0.88);
-    border-color: rgba(115,205,235,0.45);
+    color: #e91e63; background: rgba(255,255,255,0.96);
+    border-color: #f48fb1;
     touch-action: none;
   }
   #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
@@ -125,6 +131,7 @@
 <div id="hud">
   <span><span class="label">PROTO24</span>サバイバル開発</span>
   <span><span class="label">TURN</span><span id="turnText">1</span></span>
+  <span><span class="label">WAVE</span><span id="waveText">1</span></span>
   <span><span class="label">盤上</span><span id="countText">0</span></span>
   <span><span class="label">敵</span><span id="enemyCountText">7</span></span>
   <span id="phaseText"></span>
@@ -139,6 +146,7 @@
     <span>生存<span class="scoreValue" id="survivalScoreText">0</span></span>
     <span>テイク<span class="scoreValue" id="takeoutScoreText">0</span></span>
     <span>盤面<span class="scoreValue" id="boardScoreText">0</span></span>
+    <span>全滅BONUS<span class="scoreValue" id="waveBonusText">0</span></span>
     <span id="scoreTotalRow">TOTAL<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
   <button class="btn" id="fastForwardBtn">長押し早送り ×9</button>
@@ -169,6 +177,7 @@ const CONFIG = {
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
   HIROIBEO_ATTRACTION: 0.72, // 敵の進行方向を、最寄りのヒロイベオへ寄せる強さ
+  SCORE_WAVE_CLEAR: 2000,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 100,       // 1生存ターンあたりの得点
   SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
@@ -364,32 +373,36 @@ const game = {
   gameOver: false,
   score: {
     enemyTakeouts: 0,
+    waveBonus: 0,
   },
+  wave: 1,
+  enemySerial: 0,
+  ringReinforcements: new Set(),
 };
 
 const ENEMIES = [
-  { id: "pride", name: "傲慢", color: "#a95bdb" },
-  { id: "greed", name: "強欲", color: "#d6ad3c" },
-  { id: "lust", name: "色欲", color: "#df6d9d" },
-  { id: "envy", name: "嫉妬", color: "#5cad77" },
-  { id: "gluttony", name: "暴食", color: "#d9824b" },
-  { id: "wrath", name: "憤怒", color: "#d94f4f" },
-  { id: "sloth", name: "怠惰", color: "#6987a9" },
+  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72" },
+  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad" },
+  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189" },
+  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91" },
+  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58" },
+  { id: "greed", name: "ジーナ", sin: "強欲", icon: "🦊", color: "#e4e1dc" },
+  { id: "gluttony", name: "デロラス", sin: "暴食", icon: "🐊", color: "#d86e83" },
 ];
 
 const CHARACTERS = [
-  { id: "mayuu", name: "マユゥ", icon: "🐭", color: "#e8d7bd", trait: "スタンダード", mods: {} },
-  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8", trait: "直進軌道 0.25×", mods: { pathCurveMult: 0.25 } },
-  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f", trait: "曲線軌道 2.5×", mods: { pathCurveMult: 2.5 } },
-  { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
-  { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb", trait: "大型 1.2×", mods: { radiusScale: 1.2 } },
-  { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9", trait: "被弾に強い", mods: { knockResist: 0.45 } },
-  { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982", trait: "当たると止まる", mods: { selfStopMult: 0.35 } },
-  { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
-  { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e", trait: "やわらかい耳", mods: { partType: "softEars" } },
-  { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88", trait: "硬い角", mods: { partType: "hardHorn" } },
-  { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c", trait: "吹き飛ばす角", mods: { partType: "powerHorns" } },
-  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91", trait: "敵を引きつける", mods: { enemyAttractor: true } },
+  { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "直進軌道 0.25×", mods: { pathCurveMult: 0.25 } },
+  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "被弾に強い", mods: { knockResist: 0.45 } },
+  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "当たると止まる", mods: { selfStopMult: 0.35 } },
+  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "やわらかい耳", mods: { partType: "softEars" } },
+  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "硬い角", mods: { partType: "hardHorn" } },
+  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "曲線軌道 2.5×", mods: { pathCurveMult: 2.5 } },
+  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "敵を引きつける", mods: { enemyAttractor: true } },
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "吹き飛ばす角", mods: { partType: "powerHorns" } },
+  { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スタンダード", mods: {} },
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
+  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.2×", mods: { radiusScale: 1.2 } },
+  { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
 ];
 
 function randomCharacter() {
@@ -496,17 +509,36 @@ function partContactProfile(piece, dirX, dirY) {
 }
 
 /* ---------- サバイバル初期化 ---------- */
+function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
+  const enemy = ENEMIES[enemyIndex % ENEMIES.length];
+  const spawnAngle = angle ?? (-Math.PI / 2 + game.enemySerial * 2.3999632297);
+  const p = createPiece(
+    Math.cos(spawnAngle) * CONFIG.ENEMY_SPAWN_RADIUS,
+    Math.sin(spawnAngle) * CONFIG.ENEMY_SPAWN_RADIUS,
+    "enemy"
+  );
+  p.enemyId = enemy.id;
+  p.enemyName = `${enemy.name}（${enemy.sin}）`;
+  p.enemyIcon = enemy.icon;
+  p.color = enemy.color;
+  game.pieces.push(p);
+  game.enemySerial++;
+  return p;
+}
+
+function spawnEnemyWave() {
+  game.ringReinforcements = new Set();
+  for (let i = 0; i < ENEMIES.length; i++) {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * i) / ENEMIES.length;
+    spawnEnemy(i, angle);
+  }
+}
+
 function buildSurvivalGame() {
   game.pieces = [];
-  for (let i = 0; i < ENEMIES.length; i++) {
-    const enemy = ENEMIES[i];
-    const angle = -Math.PI / 2 + (Math.PI * 2 * i) / ENEMIES.length;
-    const p = createPiece(Math.cos(angle) * CONFIG.ENEMY_SPAWN_RADIUS, Math.sin(angle) * CONFIG.ENEMY_SPAWN_RADIUS, "enemy");
-    p.enemyId = enemy.id;
-    p.enemyName = enemy.name;
-    p.color = enemy.color;
-    game.pieces.push(p);
-  }
+  game.wave = 1;
+  game.enemySerial = 0;
+  spawnEnemyWave();
   game.launcherReady = true;
   game.aim = null;
   game.turn = 1;
@@ -518,6 +550,7 @@ function buildSurvivalGame() {
   game.phase = "aim";
   game.gameOver = false;
   game.score.enemyTakeouts = 0;
+  game.score.waveBonus = 0;
   document.getElementById("gameOver").classList.remove("show");
   createInitialHand();
   updateHUD();
@@ -798,10 +831,13 @@ function showGameOver(enemy) {
 }
 
 function startEnemyAdvance() {
-  const enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
+  let enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
   if (enemies.length === 0) {
-    completeTurn();
-    return;
+    game.score.waveBonus += CONFIG.SCORE_WAVE_CLEAR;
+    game.wave++;
+    spawnEnemyWave();
+    showToast(`WAVE ${game.wave - 1} CLEAR! +${CONFIG.SCORE_WAVE_CLEAR}`);
+    enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
   }
   const baseSpeed = CONFIG.ENEMY_ADVANCE_DISTANCE / CONFIG.STOP_DIST_PER_SPEED;
   const pressureEnemy = enemies.reduce((closest, enemy) =>
@@ -855,7 +891,25 @@ function handleAllPiecesSettled() {
   if (game.phase === "enemyMoving") {
     const occupyingEnemy = enemyAtCenter();
     if (occupyingEnemy) showGameOver(occupyingEnemy);
-    else completeTurn();
+    else {
+      const ringThresholds = [
+        CONFIG.HOUSE_RADIUS,
+        CONFIG.HOUSE_RADIUS * (2 / 3),
+        CONFIG.HOUSE_RADIUS * (1 / 3),
+      ];
+      for (let i = 0; i < ringThresholds.length; i++) {
+        if (game.ringReinforcements.has(i)) continue;
+        const reached = game.pieces.some(p =>
+          p.role === "enemy" && p.state === "onboard" && Math.hypot(p.x, p.y) <= ringThresholds[i]
+        );
+        if (reached) {
+          game.ringReinforcements.add(i);
+          spawnEnemy();
+          showToast("ハウス侵入！ 敵が増援");
+        }
+      }
+      completeTurn();
+    }
   }
 }
 
@@ -1124,8 +1178,12 @@ function physicsStep() {
 }
 
 function showChainToast(n) {
+  showToast(n + "個 同時テイクアウト!");
+}
+
+function showToast(text) {
   const el = document.getElementById("chainToast");
-  el.textContent = n + "個 同時テイクアウト!";
+  el.textContent = text;
   el.classList.add("show");
   game.toastTimer = 1.4;
 }
@@ -1555,7 +1613,8 @@ function calculateScore() {
   const survival = survivedTurns * CONFIG.SCORE_TURN;
   const takeout = game.score.enemyTakeouts * CONFIG.SCORE_TAKEOUT;
   const board = calculateBoardControl();
-  return { survivedTurns, survival, takeout, board, total: survival + takeout + board };
+  const waveBonus = game.score.waveBonus;
+  return { survivedTurns, survival, takeout, board, waveBonus, total: survival + takeout + board + waveBonus };
 }
 
 function updateHUD() {
@@ -1563,16 +1622,18 @@ function updateHUD() {
   const enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard").length;
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
   const score = calculateScore();
-  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board;
+  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("countText").textContent = onboard;
   document.getElementById("turnText").textContent = game.turn;
+  document.getElementById("waveText").textContent = game.wave;
   document.getElementById("enemyCountText").textContent = enemies;
   document.getElementById("phaseText").textContent = phaseNames[game.phase] ?? "";
   document.getElementById("survivalScoreText").textContent = score.survivedTurns;
   document.getElementById("takeoutScoreText").textContent = game.score.enemyTakeouts;
   document.getElementById("boardScoreText").textContent = score.board;
+  document.getElementById("waveBonusText").textContent = score.waveBonus;
   document.getElementById("totalScoreText").textContent = score.total;
 }
 
