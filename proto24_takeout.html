@@ -96,8 +96,12 @@
   }
   #gameOverTitle { font-size: 25px; font-weight: 800; margin-bottom: 8px; }
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
-  #scorePanel {
+  #sideInfo {
     position: fixed; left: 8px; top: calc(75% - 105px); z-index: 2;
+    transition: opacity 0.12s, transform 0.12s;
+  }
+  #sideInfo.hidden { opacity: 0; pointer-events: none; transform: translateX(-12px); }
+  #scorePanel {
     display: grid; grid-template-columns: repeat(2, auto); gap: 3px 12px;
     padding: 7px 9px; border-radius: 8px;
     color: rgba(238,235,228,0.82); background: rgba(28,28,34,0.72);
@@ -107,6 +111,13 @@
   }
   #scorePanel .scoreValue { color: #ffd67a; font-weight: 700; margin-left: 4px; }
   #scoreTotalRow { grid-column: 1 / -1; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.1); }
+  #fastForwardBtn {
+    width: 100%; margin-top: 5px; padding: 7px 8px;
+    color: #d8f4ff; background: rgba(40,61,72,0.88);
+    border-color: rgba(115,205,235,0.45);
+    touch-action: none;
+  }
+  #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
 </style>
 </head>
 <body>
@@ -123,11 +134,14 @@
   <button class="btn" id="resetBtn">RE</button>
 </div>
 <div id="handBar" aria-label="キャラストーン手札"></div>
-<div id="scorePanel">
-  <span>生存<span class="scoreValue" id="survivalScoreText">0</span></span>
-  <span>テイク<span class="scoreValue" id="takeoutScoreText">0</span></span>
-  <span>盤面<span class="scoreValue" id="boardScoreText">0</span></span>
-  <span id="scoreTotalRow">TOTAL<span class="scoreValue" id="totalScoreText">0</span></span>
+<div id="sideInfo">
+  <div id="scorePanel">
+    <span>生存<span class="scoreValue" id="survivalScoreText">0</span></span>
+    <span>テイク<span class="scoreValue" id="takeoutScoreText">0</span></span>
+    <span>盤面<span class="scoreValue" id="boardScoreText">0</span></span>
+    <span id="scoreTotalRow">TOTAL<span class="scoreValue" id="totalScoreText">0</span></span>
+  </div>
+  <button class="btn" id="fastForwardBtn">長押し早送り ×9</button>
 </div>
 <div id="hint">引く(左右で狙い)→ 前に押し出す(短い=強い/長い=ゆっくり)→ 離す<br>狙いの中心線から横にズレた分だけ回転。左回転=左カーブ。引いたまま放しても投げない</div>
 <div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><button class="btn" id="retryBtn">もう一度</button></div></div>
@@ -339,6 +353,7 @@ const game = {
   fastForward: 1, // 新設(PROTO23):現在の早送り倍率(なめらかに補間される)。1=通常。
                   // 「盤上の最速の石」がFF_SLOW_SPEED未満になったらFF_MAX_MULTへ寄り、速い石が
                   // あれば1へ戻る。physicsStep()内で毎フレーム更新する
+  manualFastForward: false,
   turn: 1,
   hand: [],
   selectedHandIndex: 0,
@@ -370,9 +385,9 @@ const CHARACTERS = [
   { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9", trait: "被弾に強い", mods: { knockResist: 0.45 } },
   { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982", trait: "当たると止まる", mods: { selfStopMult: 0.35 } },
   { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
-  { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e", trait: "能力準備中", mods: {} },
-  { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88", trait: "能力準備中", mods: {} },
-  { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c", trait: "能力準備中", mods: {} },
+  { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e", trait: "やわらかい耳", mods: { partType: "softEars" } },
+  { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88", trait: "硬い角", mods: { partType: "hardHorn" } },
+  { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c", trait: "吹き飛ばす角", mods: { partType: "powerHorns" } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91", trait: "能力準備中", mods: {} },
 ];
 
@@ -402,6 +417,7 @@ function renderHand() {
     button.dataset.pathCurveMult = String(character.mods.pathCurveMult ?? 1);
     button.dataset.radiusScale = String(character.mods.radiusScale ?? 1);
     button.dataset.trajectoryGuide = String(character.mods.trajectoryGuide ?? false);
+    button.dataset.partType = character.mods.partType ?? "none";
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
     button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>`;
     button.style.borderBottomColor = character.color;
@@ -450,6 +466,7 @@ function createPiece(x, y, role, character = null) {
       restitution: 0,
       radiusScale: 1,
       trajectoryGuide: false,
+      partType: null,
       ...(character?.mods ?? {}),
     },
   };
@@ -457,6 +474,18 @@ function createPiece(x, y, role, character = null) {
 
 function pieceRadius(piece) {
   return CONFIG.PIECE_RADIUS * (piece?.mods?.radiusScale ?? 1);
+}
+
+function partContactProfile(piece, dirX, dirY) {
+  const type = piece?.mods?.partType;
+  const baseRadius = pieceRadius(piece);
+  if (!type) return { radius: baseRadius, partHit: false, type: null };
+  const axisAngle = piece.rot - Math.PI / 2;
+  const alignment = Math.cos(axisAngle) * dirX + Math.sin(axisAngle) * dirY;
+  const limit = type === "softEars" ? Math.cos(0.72) : Math.cos(0.58);
+  const partHit = alignment >= limit;
+  const extension = type === "softEars" ? 1.65 : (type === "powerHorns" ? 1.35 : 1.5);
+  return { radius: baseRadius * (partHit ? extension : 1), partHit, type };
 }
 
 /* ---------- サバイバル初期化 ---------- */
@@ -478,6 +507,7 @@ function buildSurvivalGame() {
   game.pendingHandIndex = null;
   game.chainCountThisThrow = 0;
   game.fastForward = 1;
+  game.manualFastForward = false;
   game.phase = "aim";
   game.gameOver = false;
   game.score.enemyTakeouts = 0;
@@ -540,6 +570,11 @@ function startAim(pointerId, px0, py0) {
     pushDist: 0,       // 押し出し距離(瞬間値。フリックの後方ぶれで一時的に縮むことがある)
     peakPush: 0,       // 押し出しの最大到達値(パワー計算・投擲判定はこちらを使う)
   };
+  updateSideInfoVisibility();
+}
+
+function updateSideInfoVisibility() {
+  document.getElementById("sideInfo")?.classList.toggle("hidden", game.aim !== null);
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
@@ -810,7 +845,8 @@ function physicsStep() {
   // あれば通常速度(倍率1)を保ち、その石が見えるドロー滑走を早送りしてしまわない。
   // 全てが止まりかけたら、その場でくるくる回っているだけの無駄時間なのでFF_MAX_MULTへ寄せる。
   // 倍率はFF_EASEで目標値へなめらかに補間(衝突で石が再加速したら自然に通常速度へ戻る)
-  const ffTarget = (anyMoving && maxSpd < CONFIG.FF_SLOW_SPEED) ? CONFIG.FF_MAX_MULT : 1;
+  const autoFastForward = anyMoving && maxSpd < CONFIG.FF_SLOW_SPEED;
+  const ffTarget = (game.manualFastForward || autoFastForward) ? CONFIG.FF_MAX_MULT : 1;
   game.fastForward += (ffTarget - game.fastForward) * CONFIG.FF_EASE;
   if (Math.abs(game.fastForward - ffTarget) < 0.02) game.fastForward = ffTarget;
   const fastForwardMult = game.fastForward;
@@ -885,10 +921,13 @@ function physicsStep() {
         if (b.state !== "onboard") continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const dist = Math.hypot(dx, dy);
-        const minDist = pieceRadius(a) + pieceRadius(b);
-        if (dist >= minDist || dist === 0) continue;
-
+        if (dist === 0) continue;
         const nx = dx / dist, ny = dy / dist;
+        const profileA = partContactProfile(a, nx, ny);
+        const profileB = partContactProfile(b, -nx, -ny);
+        const minDist = profileA.radius + profileB.radius;
+        if (dist >= minDist) continue;
+
         const overlap = minDist - dist;
         a.x -= nx * overlap * 0.5; a.y -= ny * overlap * 0.5;
         b.x += nx * overlap * 0.5; b.y += ny * overlap * 0.5;
@@ -910,6 +949,8 @@ function physicsStep() {
           const speedA = Math.hypot(a.vx, a.vy), speedB = Math.hypot(b.vx, b.vy);
           const strikerIsA = speedA >= speedB;
           const S = strikerIsA ? a : b, T = strikerIsA ? b : a;
+          const SProfile = strikerIsA ? profileA : profileB;
+          const TProfile = strikerIsA ? profileB : profileA;
           const nSTx = strikerIsA ? nx : -nx, nSTy = strikerIsA ? ny : -ny; // S→Tの法線
           const impact = -rvn; // 衝突の強さ(相対接近速度)
 
@@ -931,6 +972,20 @@ function physicsStep() {
             let tSpeed = relSpeed * cosTheta; // Tの新しい相対速度(入射方向)
             sSpeed *= S.mods.selfStopMult;
             tSpeed *= T.mods.knockResist;
+
+            // 方向付き部位: 回転入力とは無関係に、接触方向と見た目の向きp.rotで判定する。
+            if (SProfile.partHit && SProfile.type === "softEars") {
+              tSpeed = 0;
+              sSpeed *= 0.3;
+            } else if (SProfile.partHit && SProfile.type === "hardHorn") {
+              tSpeed *= 1.5;
+            } else if (SProfile.partHit && SProfile.type === "powerHorns") {
+              tSpeed *= 2.0;
+            }
+            if (TProfile.partHit && TProfile.type === "softEars") {
+              tSpeed *= 0.15;
+              sSpeed *= 0.5;
+            }
             const Told_x = T.vx, Told_y = T.vy;
             S.vx = Told_x + tx * sSpeed; S.vy = Told_y + ty * sSpeed;
             T.vx = Told_x + dirIx * tSpeed; T.vy = Told_y + dirIy * tSpeed;
@@ -1264,7 +1319,7 @@ function render() {
   ctx.lineWidth = 2;
   ctx.stroke();
   if (game.launcherReady) {
-    drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1);
+    drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1, selectedCharacter?.mods?.partType);
   }
 
   if (a && selectedCharacter?.mods?.trajectoryGuide) {
@@ -1371,13 +1426,13 @@ function render() {
       r *= 1 - 0.7 * t;
       alpha = 1 - t;
     }
-    drawPiece(s.x, s.y, r, p.color ?? ROLE_COLOR[p.role], p.rot, alpha);
+    drawPiece(s.x, s.y, r, p.color ?? ROLE_COLOR[p.role], p.rot, alpha, p.mods.partType);
   }
 
   ctx.restore(); // 衝突演出の変換を解除
 }
 
-function drawPiece(x, y, r, color, rot, alpha) {
+function drawPiece(x, y, r, color, rot, alpha, partType = null) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y);
@@ -1388,6 +1443,34 @@ function drawPiece(x, y, r, color, rot, alpha) {
   ctx.fill();
 
   ctx.rotate(rot);
+
+  if (partType === "softEars") {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = Math.max(1, r * 0.06);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(side * r * 0.28, -r * 1.12, r * 0.18, r * 0.55, side * 0.12, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+  } else if (partType === "hardHorn") {
+    ctx.fillStyle = "#fff1c4";
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.23, -r * 0.72);
+    ctx.lineTo(0, -r * 1.5);
+    ctx.lineTo(r * 0.23, -r * 0.72);
+    ctx.closePath(); ctx.fill();
+  } else if (partType === "powerHorns") {
+    ctx.fillStyle = "#ffe09a";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * r * 0.15, -r * 0.72);
+      ctx.lineTo(side * r * 0.48, -r * 1.34);
+      ctx.lineTo(side * r * 0.58, -r * 0.62);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
   ctx.beginPath();
   ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
   ctx.closePath();
@@ -1449,7 +1532,7 @@ function updateHUD() {
 
 /* ---------- 入力 ---------- */
 window.addEventListener("pointerdown", (e) => {
-  if (e.target.closest("#scenarioBar") || e.target.closest("#handBar")) return;
+  if (e.target.closest("#scenarioBar") || e.target.closest("#handBar") || e.target.closest("#sideInfo")) return;
   if (game.aim !== null || !game.launcherReady || game.phase !== "aim" || game.gameOver) return;
   e.preventDefault();
   startAim(e.pointerId, e.clientX, e.clientY);
@@ -1464,11 +1547,15 @@ window.addEventListener("pointerup", (e) => {
   if (!game.aim || game.aim.pointerId !== e.pointerId) return;
   const aim = game.aim;
   game.aim = null;
+  updateSideInfoVisibility();
   const params = finalizeAim(aim, e.clientX, e.clientY);
   if (params) throwPiece(params);
 });
 
-window.addEventListener("pointercancel", () => { game.aim = null; });
+window.addEventListener("pointercancel", () => {
+  game.aim = null;
+  updateSideInfoVisibility();
+});
 
 /* ---------- リセットボタン ---------- */
 function bindResetButtons() {
@@ -1482,9 +1569,28 @@ function bindResetButtons() {
   });
 }
 
+function bindFastForwardButton() {
+  const button = document.getElementById("fastForwardBtn");
+  const stop = () => {
+    game.manualFastForward = false;
+    button.classList.remove("holding");
+  };
+  button.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    game.manualFastForward = true;
+    button.classList.add("holding");
+    button.setPointerCapture?.(e.pointerId);
+  });
+  button.addEventListener("pointerup", stop);
+  button.addEventListener("pointercancel", stop);
+  button.addEventListener("lostpointercapture", stop);
+}
+
 /* ---------- 起動 ---------- */
 onResize();
 bindResetButtons();
+bindFastForwardButton();
 buildSurvivalGame();
 requestAnimationFrame(frame);
 </script>
