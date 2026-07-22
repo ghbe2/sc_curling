@@ -7,6 +7,8 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   html, body {
+    --side-panel-width: 104px;
+    --side-panel-height: 280px;
     margin: 0; padding: 0;
     background-color: #fce4ec;
     background-image:
@@ -32,7 +34,7 @@
   #hud .label { opacity: 0.6; font-size: 10px; margin-right: 2px; }
   #scenarioBar {
     position: fixed; top: 6px; right: 6px;
-    display: flex; gap: 4px;
+    display: flex; gap: 4px; z-index: 4;
   }
   .btn {
     background: rgba(255,255,255,0.96); color: #e91e63;
@@ -46,9 +48,10 @@
   #resetBtn { background: rgba(255,255,255,0.96); border-color: #f48fb1; }
   #resetBtn:active { background: #5c4646; }
   #handBar {
-    position: fixed; right: 6px; top: calc(100% - 300px); bottom: auto;
+    position: fixed; right: 7px; top: calc(100% - 320px); bottom: auto;
     transform: none;
-    display: grid; grid-template-columns: 74px; gap: 4px;
+    display: grid; grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); gap: 4px;
+    width: var(--side-panel-width); height: var(--side-panel-height); box-sizing: border-box;
     padding: 23px 5px 6px;
     border: 2px solid #f48fb1; border-radius: 15px;
     background: rgba(255,255,255,0.9);
@@ -57,13 +60,13 @@
     transition: opacity 0.18s, transform 0.18s;
   }
   #handBar::before {
-    content: 'ストーントレイ'; position: absolute; top: 5px; left: 0; right: 0;
+    content: 'えらんで'; position: absolute; top: 5px; left: 0; right: 0;
     color: #e91e63; text-align: center; font: 9px 'DotGothic16', sans-serif;
   }
   #handBar.refilling { animation: trayBump 0.38s ease-out; }
   #handBar.hidden { opacity: 0; pointer-events: none; transform: translateX(18px); }
   .handCard {
-    min-height: 48px; padding: 5px 3px;
+    min-height: 0; padding: 3px 2px;
     border: 1px solid rgba(244,143,177,0.7); border-radius: 9px;
     color: #2b1f24; background: rgba(255,255,255,0.74);
     font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.2;
@@ -82,7 +85,12 @@
   @keyframes trayBump { 0% { transform: scale(1); } 45% { transform: scale(1.035); } 100% { transform: scale(1); } }
   #chainToast {
     position: fixed; left: 50%; top: 26%;
-    transform: translate(-50%, -50%) scale(0.8);
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    width: min(94vw, 560px);
+    z-index: 10; pointer-events: none;
+  }
+  .toastBurst {
     color: #e91e63;
     font-family: 'DotGothic16', system-ui, sans-serif;
     font-weight: 700;
@@ -90,14 +98,15 @@
     line-height: 1.05;
     text-align: center;
     white-space: nowrap;
-    z-index: 10;
     text-shadow: 3px 0 rgba(255,64,129,0.45), -3px 0 rgba(0,210,220,0.38), 0 4px 12px rgba(80,30,50,0.28);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s, transform 0.15s;
+    animation: toastBurst 1.8s ease-out forwards;
   }
-  #chainToast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   #chainToast .toastScore { margin-top: 10px; font-size: clamp(18px, 5vw, 28px); color: #4a2133; text-align: center; }
+  @keyframes toastBurst {
+    0% { opacity: 0; transform: scale(.62) translateY(10px); }
+    13%, 74% { opacity: 1; transform: scale(1) translateY(0); }
+    100% { opacity: 0; transform: scale(1.04) translateY(-12px); }
+  }
   #dangerAlert {
     position: fixed; top: 52px; left: 50%; z-index: 8;
     transform: translateX(-50%); min-width: 220px;
@@ -138,16 +147,12 @@
   }
   #sideInfo.hidden { opacity: 0; pointer-events: none; transform: translateX(-12px); }
   #scorePanel {
-    display: grid; grid-template-columns: repeat(2, auto); gap: 3px 12px;
-    padding: 7px 9px; border-radius: 8px;
-    color: #2b1f24; background: rgba(255,255,255,0.96);
-    border: 2px solid #f48fb1;
-    box-shadow: 0 5px 16px rgba(80,30,50,0.14);
-    font: 10px/1.35 'DotGothic16', system-ui, sans-serif;
+    color: #4a2133;
+    font: 700 15px/1 'DotGothic16', system-ui, sans-serif;
     pointer-events: none;
+    text-shadow: 0 2px 0 rgba(255,255,255,0.96), 0 0 9px rgba(255,255,255,0.9);
   }
-  #scorePanel .scoreValue { color: #e91e63; font-weight: 700; margin-left: 4px; }
-  #scoreTotalRow { grid-column: 1 / -1; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.1); }
+  #scorePanel .scoreValue { color: #e91e63; font-size: 27px; font-weight: 900; margin-left: 6px; }
   #fastForwardBtn {
     position: fixed; left: 50%; right: auto; top: calc(92% - 86px); bottom: auto; z-index: 3;
     transform: translateX(-50%); width: 88px; height: 48px; padding: 6px 3px;
@@ -158,18 +163,19 @@
   #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
   #fastForwardBtn.hidden { opacity: 0; pointer-events: none; }
   #throwTutorial {
-    position: fixed; left: 7px; top: calc(100% - 300px); bottom: auto; z-index: 2;
-    width: 104px; padding: 9px 8px; box-sizing: border-box;
+    position: fixed; left: 7px; top: calc(100% - 320px); bottom: auto; z-index: 2;
+    width: var(--side-panel-width); height: var(--side-panel-height); padding: 9px 8px; box-sizing: border-box;
     border: 2px solid #f48fb1; border-radius: 12px;
     background: rgba(255,255,255,0.92); color: #4a2133;
     font: 10px/1.35 'DotGothic16', system-ui, sans-serif;
-    pointer-events: none; transition: opacity 0.15s, width 0.15s;
+    pointer-events: none; transition: opacity 0.15s, transform 0.18s;
   }
   #throwTutorial.hidden { opacity: 0; }
-  #tutorialToggle { position: absolute; right: 0; top: auto; bottom: -23px; border: 0; border-radius: 8px; padding: 3px 7px; color: #e91e63; background: #fff0f5; box-shadow: 0 2px 7px rgba(80,30,50,0.14); font: 9px 'DotGothic16', sans-serif; pointer-events: auto; }
-  #throwTutorial.minimized { width: 76px; padding: 8px; }
+  #throwTutorial.hidden #tutorialControls { pointer-events: none; }
+  #tutorialControls { position: absolute; left: 0; right: 0; bottom: -25px; display: flex; justify-content: center; gap: 4px; pointer-events: auto; }
+  #tutorialToggle, #swapUiBtn { border: 0; border-radius: 8px; padding: 4px 7px; color: #e91e63; background: #fff0f5; box-shadow: 0 2px 7px rgba(80,30,50,0.14); font: 9px 'DotGothic16', sans-serif; white-space: nowrap; }
+  #throwTutorial.minimized { height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
   #throwTutorial.minimized .tutorialBody { display: none; }
-  #throwTutorial.minimized #tutorialToggle { position: static; width: 100%; }
   .tutorialStep { margin-bottom: 9px; opacity: 0.46; }
   .tutorialStep.active { opacity: 1; color: #e91e63; }
   .tutorialTitle { display: block; margin-bottom: 3px; font-size: 11px; }
@@ -188,8 +194,37 @@
   #spinMeter::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 11px; background: #4a2133; transform: translateX(-1px); }
   #spinFill { position: absolute; left: 50%; width: 0; background: #ff4081; transition: width 0.05s, left 0.05s; }
   #spinReadout { text-align: center; margin-top: 3px; min-height: 14px; }
+  body.ui-swapped #handBar { left: 7px; right: auto; }
+  body.ui-swapped #throwTutorial { left: auto; right: 7px; }
+  body.ui-swapped #handBar.hidden { transform: translateX(-18px); }
+  #howToOverlay {
+    position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
+    padding: 14px; box-sizing: border-box; background: rgba(43,31,36,0.72); touch-action: pan-y;
+  }
+  #howToOverlay.show { display: flex; }
+  #howToPanel {
+    width: min(720px, 100%); max-height: calc(100vh - 28px); overflow-y: auto;
+    border: 3px solid #f48fb1; border-radius: 20px; background: #fff8fb;
+    box-shadow: 0 16px 46px rgba(43,31,36,0.34); color: #4a2133;
+    font-family: 'DotGothic16', system-ui, sans-serif; -webkit-overflow-scrolling: touch;
+  }
+  .howToHeader {
+    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; background: rgba(255,248,251,0.97); border-bottom: 1px solid #f7bfd1;
+  }
+  .howToHeader h2 { margin: 0; color: #e91e63; font-size: 21px; }
+  #howToClose { font-size: 12px; }
+  .howToLead { margin: 11px 14px 4px; text-align: center; color: #e91e63; font-size: 12px; }
+  .howToGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 16px; }
+  .howToCard { overflow: hidden; border: 1px solid #f5b0c8; border-radius: 13px; background: white; box-shadow: 0 3px 10px rgba(80,30,50,0.08); }
+  .howToShot { width: 100%; height: 92px; background: #fce4ec; }
+  .howToCopy { padding: 8px 9px 10px; font-size: 11px; line-height: 1.55; }
+  .howToCopy b { display: block; margin-bottom: 2px; color: #e91e63; font-size: 13px; }
   @media (max-width: 390px) {
-    #throwTutorial { width: 92px; padding: 7px 6px; font-size: 9px; }
+    html, body { --side-panel-width: 92px; }
+    #throwTutorial { padding: 7px 6px; font-size: 9px; }
+    .howToGrid { grid-template-columns: 1fr; }
+    .howToShot { height: 86px; }
   }
 </style>
 </head>
@@ -206,6 +241,7 @@
 <div id="chainToast"></div>
 <div id="dangerAlert" aria-live="polite"></div>
 <div id="scenarioBar">
+  <button class="btn" id="howToBtn">遊び方</button>
   <button class="btn" id="soundBtn" aria-pressed="true">🔊</button>
   <button class="btn" id="resetBtn">RE</button>
 </div>
@@ -217,11 +253,27 @@
 </div>
 <button class="btn" id="fastForwardBtn">はやく♡</button>
 <div id="throwTutorial">
-  <button id="tutorialToggle" type="button" aria-expanded="true">− とじる</button>
+  <div id="tutorialControls"><button id="tutorialToggle" type="button" aria-expanded="true">かくす</button><button id="swapUiBtn" type="button">いれかえ</button></div>
   <div class="tutorialBody">
   <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">① ねらう</b><div class="tutorialGesture"><span class="gestureArrow" id="aimGestureArrow">↓</span><span class="gestureFinger">👆</span></div><b id="aimInstruction">下へ引く</b><br><span id="aimSub">ねらいモードにする</span></div>
   <div class="tutorialStep" id="tutorialPower"><b class="tutorialTitle" id="powerTitle">② なげる</b><div class="tutorialGesture"><span class="gestureArrow">↑</span><span class="gestureFinger">👆</span></div><b id="powerInstruction">上へ押して離す</b><div class="tutorialMeter"><div class="tutorialFill" id="powerFill"></div></div><div id="powerReadout">―</div></div>
   <div class="tutorialStep" id="tutorialSpin"><b class="tutorialTitle">かいてん</b><div class="tutorialMeter" id="spinMeter"><div class="tutorialFill" id="spinFill"></div></div><div id="spinReadout">←　まっすぐ　→</div></div>
+  </div>
+</div>
+<div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
+  <div id="howToPanel">
+    <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose">はじめる！</button></div>
+    <p class="howToLead">大罪をはじいて、まんなかの💖を守ろう！</p>
+    <div class="howToGrid">
+      <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① 💖を守ろう</b>すこしずつハートへ迫る大罪を、ハウスの外へはじき出そう。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>② 侵入に注意</b>敵がハウスに入ると、外からさらに敵が増えるよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="throw"></canvas><div class="howToCopy"><b>③ えらんで、ねらって、おしだす</b>強く押せばはやく、やさしく押せばおそく進むよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="spin"></canvas><div class="howToCopy"><b>④ 回転でまげる</b>回転をかけた方向へ曲がるよ。強い回転ほど曲がりづらくなる。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="score"></canvas><div class="howToCopy"><b>⑤ 高得点をねらおう</b>敵をはじいたり、ハウスに味方の石を残すとスコアアップ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑥ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑦ 石には特徴がある</b>曲がり方、大きさ、ぶつける力などがキャラごとに違うよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑧ 敵にも特徴がある</b>七つの大罪はそれぞれ違う個性を持つ。動きをよく見よう。</div></article>
+    </div>
   </div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
@@ -438,6 +490,7 @@ const game = {
   lockedAim: null,
   chainCountThisThrow: 0,
   toastTimer: 0,
+  toastQueue: [],
   shakeMag: 0,   // 画面揺れの現在量(px)
   zoomPulse: 0,  // 瞬間ズームの現在量(スケール加算値)
   hitStopFrames: 0,
@@ -576,6 +629,11 @@ function createPiece(x, y, role, character = null) {
     spawnPopped: role !== "enemy",
     entered: Math.hypot(x, y) < CONFIG.BOARD_RADIUS,
     trail: [],
+    isCurrentShot: false,
+    indirectFromShot: false,
+    takeWasRaise: false,
+    hasCollided: false,
+    buttonDrawAwarded: false,
     characterId: character?.id ?? null,
     characterName: character?.name ?? null,
     icon: character?.icon ?? null,
@@ -660,6 +718,8 @@ function buildSurvivalGame() {
   game.shotInProgress = false;
   game.pendingHandIndex = null;
   game.chainCountThisThrow = 0;
+  game.toastTimer = 0;
+  game.toastQueue = [];
   game.fastForward = 1;
   game.manualFastForward = false;
   game.phase = "aim";
@@ -674,6 +734,7 @@ function buildSurvivalGame() {
   game.hitStopFrames = 0;
   game.fxRings = [];
   game.fxParticles = [];
+  document.getElementById("chainToast").replaceChildren();
   document.getElementById("gameOver").classList.remove("show");
   createInitialHand();
   updateHUD();
@@ -766,7 +827,7 @@ function updateThrowTutorial() {
     aimStep?.classList.remove("pull", "adjust");
     if (aimArrow) aimArrow.textContent = "→";
     if (aimInstruction) aimInstruction.textContent = "ストーンを選ぶ";
-    if (aimSub) aimSub.textContent = "右のトレイからえらんでね";
+    if (aimSub) aimSub.textContent = "「えらんで」から選んでね";
     document.getElementById("tutorialPower")?.classList.remove("active");
     document.getElementById("tutorialSpin")?.classList.remove("active");
     const powerFill = document.getElementById("powerFill");
@@ -980,7 +1041,9 @@ function throwPiece(params) {
   const character = game.hand[handIndex];
   if (!character) return;
   const launch = launcherPos();
+  for (const oldPiece of game.pieces) oldPiece.isCurrentShot = false;
   const p = createPiece(launch.x, launch.y, "player", character);
+  p.isCurrentShot = true;
   const speed = params.speed * p.mods.speedMult;
   p.vx = params.dirX * speed;
   p.vy = params.dirY * speed;
@@ -1259,7 +1322,12 @@ function startEnemyAdvance() {
 
 function handleAllPiecesSettled() {
   if (game.phase === "playerMoving") {
-    if (game.chainCountThisThrow >= 2) showChainToast(game.chainCountThisThrow);
+    const currentShot = game.pieces.find(p => p.isCurrentShot && p.state === "onboard");
+    if (currentShot && !currentShot.buttonDrawAwarded && !currentShot.hasCollided &&
+        Math.hypot(currentShot.x, currentShot.y) <= CONFIG.HOUSE_RADIUS / 12) {
+      currentShot.buttonDrawAwarded = true;
+      showToast("ぼたんどろーっ！");
+    }
     const occupyingEnemy = enemyAtCenter();
     if (game.buttonDanger && occupyingEnemy) {
       showGameOver(occupyingEnemy);
@@ -1473,6 +1541,15 @@ function physicsStep() {
           const nSTx = strikerIsA ? nx : -nx, nSTy = strikerIsA ? ny : -ny; // S→Tの法線
           const impact = -rvn; // 衝突の強さ(相対接近速度)
 
+          S.hasCollided = true;
+          T.hasCollided = true;
+          // 投げた石から受け取った運動を次の石へ伝える。投げた石自身ではなく、
+          // その影響を受けた別の石が敵を飛ばした場合をレイズテイクとして記録する。
+          if ((S.isCurrentShot || S.indirectFromShot) && !T.isCurrentShot) {
+            T.indirectFromShot = true;
+            if (!S.isCurrentShot && T.role === "enemy") T.takeWasRaise = true;
+          }
+
           if (relSpeed > 0.001) {
             const relVx = S.vx - T.vx, relVy = S.vy - T.vy;
             const along = relVx * nSTx + relVy * nSTy; // 法線方向成分(Sの接近速度)
@@ -1589,6 +1666,9 @@ function physicsStep() {
           game.chainCountThisThrow++;
           game.score.enemyTakeouts++;
           addImpactFx(p.x, p.y, 7, true);
+          if (p.takeWasRaise) showToast("れいずていくっ！");
+          if (game.chainCountThisThrow === 2) showChainToast(2);
+          if (game.chainCountThisThrow === 3) showChainToast(3);
         }
         continue;
       }
@@ -1632,13 +1712,14 @@ function physicsStep() {
 }
 
 function showChainToast(n) {
-  const names = { 2: "だぶるていくっ!!", 3: "とりぷるていくっ!!!", 4: "よんこどりっ!!!!" };
-  showToast(names[n] ?? `${n}こどりっ!!!!!`);
+  const names = { 2: "だぶるていくっ!!", 3: "とりぷるていくっ!!!" };
+  if (names[n]) showToast(names[n]);
 }
 
 function showToast(text, scoreText = "") {
-  const el = document.getElementById("chainToast");
-  el.replaceChildren();
+  const container = document.getElementById("chainToast");
+  const el = document.createElement("div");
+  el.className = "toastBurst";
   const title = document.createElement("div");
   title.textContent = text;
   el.appendChild(title);
@@ -1648,8 +1729,8 @@ function showToast(text, scoreText = "") {
     score.textContent = scoreText;
     el.appendChild(score);
   }
-  el.classList.add("show");
-  game.toastTimer = 1.8;
+  container.appendChild(el);
+  window.setTimeout(() => el.remove(), 1850);
 }
 
 /* ---------- SE ---------- */
@@ -1810,10 +1891,6 @@ function frame(now) {
   accumulator += delta;
   while (accumulator >= STEP) {
     physicsStep();
-    if (game.toastTimer > 0) {
-      game.toastTimer -= STEP;
-      if (game.toastTimer <= 0) document.getElementById("chainToast").classList.remove("show");
-    }
     accumulator -= STEP;
   }
   updatePresentationFx(delta);
@@ -1846,6 +1923,7 @@ function onResize() {
   view.scale = Rs / CONFIG.BOARD_RADIUS;
   view.cx = w / 2;
   view.cy = topBar + Rs + 6;
+  drawHowToShots();
 }
 window.addEventListener("resize", onResize);
 
@@ -2037,18 +2115,24 @@ function render() {
 
   if (!a && game.lockedAim) {
     drawAimDirectionLine(game.lockedAim);
+    if (selectedCharacter?.mods?.trajectoryGuide) {
+      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * (selectedCharacter.mods.radiusScale ?? 1));
+    }
     ctx.fillStyle = "#e91e63";
     ctx.font = "700 13px 'DotGothic16', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("ねらいOK → まえへおす", launchBase.x, launchBase.y + launcherRadius + 24);
   }
 
-  // 軌道予測は一時停止中。ユゥナリナも現在は共通の直線ガイドのみ。
+  // 共通ガイドは直線のみ。ユゥナリナだけは、最初に当たる石の飛ぶ方向も重ねて表示する。
 
   // 投球UI
   if (a) {
     const pushing = a.state === "push";
     drawAimDirectionLine(a);
+    if (selectedCharacter?.mods?.trajectoryGuide) {
+      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * (selectedCharacter.mods.radiusScale ?? 1));
+    }
 
     // アンカーとデッドゾーン
     ctx.beginPath();
@@ -2340,6 +2424,97 @@ function bindFastForwardButton() {
   button.addEventListener("lostpointercapture", stop);
 }
 
+function drawHowToShots() {
+  document.querySelectorAll(".howToShot").forEach((canvasEl) => {
+    const rect = canvasEl.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvasEl.width = Math.round(rect.width * dpr);
+    canvasEl.height = Math.round(rect.height * dpr);
+    const g = canvasEl.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = rect.width, h = rect.height;
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = "#fce4ec";
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = "rgba(255,255,255,.55)";
+    g.lineWidth = 1;
+    for (let x = 0; x < w; x += 18) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    for (let y = 0; y < h; y += 18) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+
+    const house = (x, y, r) => {
+      for (const [radius, color] of [[r, "#8f78bd"], [r * 0.66, "#fff"], [r * 0.33, "#ef8aad"], [r * 0.1, "#fff"]]) {
+        g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+      }
+    };
+    const stone = (x, y, icon, enemy = false, r = 12) => {
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = enemy ? "#17131c" : "rgba(255,255,255,.9)"; g.fill();
+      g.strokeStyle = enemy ? "#ff6e9e" : "#6a4a59"; g.lineWidth = 2; g.stroke();
+      g.font = `${r * 1.25}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+      g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#222"; g.fillText(icon, x, y + 1);
+    };
+    const arrow = (x1, y1, x2, y2, color = "#e91e63") => {
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      g.strokeStyle = color; g.fillStyle = color; g.lineWidth = 3; g.lineCap = "round";
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - Math.cos(angle - .55) * 8, y2 - Math.sin(angle - .55) * 8); g.lineTo(x2 - Math.cos(angle + .55) * 8, y2 - Math.sin(angle + .55) * 8); g.closePath(); g.fill();
+    };
+    const label = (text, x, y, color = "#e91e63", size = 12) => {
+      g.fillStyle = color; g.font = `700 ${size}px 'DotGothic16', sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, x, y);
+    };
+
+    const scene = canvasEl.dataset.scene;
+    if (scene === "heart") {
+      house(w * .5, h * .48, 33); label("💖", w * .5, h * .48, "#e91e63", 18);
+      stone(w * .18, h * .25, "🐻", true); stone(w * .8, h * .7, "🐊", true);
+      arrow(w * .26, h * .29, w * .41, h * .42); arrow(w * .72, h * .66, w * .59, h * .54);
+    } else if (scene === "reinforce") {
+      house(w * .43, h * .5, 34); stone(w * .43, h * .34, "🦁", true); arrow(w * .83, h * .3, w * .64, h * .39); stone(w * .88, h * .24, "🦊", true); label("＋ なかま！", w * .76, h * .72);
+    } else if (scene === "throw") {
+      stone(w * .23, h * .25, "🐭"); stone(w * .23, h * .55, "🐮"); label("えらぶ", w * .23, h * .82, "#4a2133", 10);
+      stone(w * .58, h * .68, "🐔", false, 14); arrow(w * .58, h * .6, w * .58, h * .18); label("ねらう → おす", w * .73, h * .88, "#e91e63", 10);
+    } else if (scene === "spin") {
+      stone(w * .5, h * .72, "🐍", false, 14);
+      g.strokeStyle = "#e91e63"; g.lineWidth = 3; g.beginPath(); g.moveTo(w * .5, h * .64); g.bezierCurveTo(w * .48, h * .45, w * .68, h * .28, w * .78, h * .17); g.stroke();
+      arrow(w * .36, h * .74, w * .26, h * .62); arrow(w * .64, h * .74, w * .74, h * .62); label("回転した方へ", w * .5, h * .15, "#4a2133", 10);
+    } else if (scene === "score") {
+      house(w * .36, h * .55, 31); stone(w * .36, h * .55, "🐶"); stone(w * .74, h * .35, "🐻", true); arrow(w * .72, h * .39, w * .9, h * .2); label("SCORE +", w * .72, h * .72, "#e91e63", 15);
+    } else if (scene === "blank") {
+      house(w * .5, h * .5, 34); label("ぶらんくっ！", w * .5, h * .5, "#e91e63", 15); label("BONUS", w * .5, h * .78, "#4a2133", 10);
+    } else if (scene === "stones") {
+      stone(w * .22, h * .4, "🐭", false, 14); stone(w * .5, h * .4, "🐔", false, 11); stone(w * .78, h * .4, "🐶", false, 17);
+      label("直進", w * .22, h * .78, "#4a2133", 9); label("ガイド", w * .5, h * .78, "#4a2133", 9); label("大型", w * .78, h * .78, "#4a2133", 9);
+    } else if (scene === "enemies") {
+      stone(w * .22, h * .42, "🐻", true, 15); stone(w * .5, h * .42, "🦁", true, 15); stone(w * .78, h * .42, "🐊", true, 15); label("それぞれ違う動き", w * .5, h * .8, "#e91e63", 11);
+    }
+  });
+}
+
+function bindHowTo() {
+  const overlay = document.getElementById("howToOverlay");
+  const openButton = document.getElementById("howToBtn");
+  const closeButton = document.getElementById("howToClose");
+  if (!overlay || !openButton || !closeButton) return;
+  const open = () => { overlay.classList.add("show"); requestAnimationFrame(drawHowToShots); };
+  const close = () => overlay.classList.remove("show");
+  openButton.addEventListener("click", (e) => { e.stopPropagation(); open(); });
+  closeButton.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  overlay.addEventListener("pointerdown", (e) => e.stopPropagation());
+  requestAnimationFrame(drawHowToShots);
+}
+
+function bindUiSwap() {
+  const button = document.getElementById("swapUiBtn");
+  if (!button) return;
+  try { document.body.classList.toggle("ui-swapped", localStorage.getItem("curlingUiSwapped") === "1"); } catch {}
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.body.classList.toggle("ui-swapped");
+    try { localStorage.setItem("curlingUiSwapped", document.body.classList.contains("ui-swapped") ? "1" : "0"); } catch {}
+    playUiPopSound(205, 0.04);
+  });
+}
+
 function bindTutorialToggle() {
   const panel = document.getElementById("throwTutorial");
   const button = document.getElementById("tutorialToggle");
@@ -2364,6 +2539,8 @@ onResize();
 bindResetButtons();
 bindFastForwardButton();
 bindTutorialToggle();
+bindUiSwap();
+bindHowTo();
 bindSoundButton();
 buildSurvivalGame();
 window.addEventListener("touchstart", unlockAudio, { capture: true, passive: true });
