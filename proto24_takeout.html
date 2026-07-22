@@ -41,7 +41,7 @@
   #resetBtn { background: #4a3838; border-color: #6a4c4c; }
   #resetBtn:active { background: #5c4646; }
   #handBar {
-    position: fixed; right: 6px; top: 50%;
+    position: fixed; right: 6px; top: 75%;
     transform: translateY(-50%);
     display: grid; grid-template-columns: 74px; gap: 6px;
     z-index: 3;
@@ -95,6 +95,17 @@
   }
   #gameOverTitle { font-size: 25px; font-weight: 800; margin-bottom: 8px; }
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
+  #scorePanel {
+    position: fixed; left: 8px; top: 52%; z-index: 2;
+    display: grid; grid-template-columns: repeat(2, auto); gap: 3px 12px;
+    padding: 7px 9px; border-radius: 8px;
+    color: rgba(238,235,228,0.82); background: rgba(28,28,34,0.72);
+    border: 1px solid rgba(255,255,255,0.09);
+    font: 10px/1.35 system-ui, sans-serif;
+    pointer-events: none;
+  }
+  #scorePanel .scoreValue { color: #ffd67a; font-weight: 700; margin-left: 4px; }
+  #scoreTotalRow { grid-column: 1 / -1; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.1); }
 </style>
 </head>
 <body>
@@ -111,6 +122,12 @@
   <button class="btn" id="resetBtn">RE</button>
 </div>
 <div id="handBar" aria-label="キャラストーン手札"></div>
+<div id="scorePanel">
+  <span>生存<span class="scoreValue" id="survivalScoreText">0</span></span>
+  <span>テイク<span class="scoreValue" id="takeoutScoreText">0</span></span>
+  <span>盤面<span class="scoreValue" id="boardScoreText">0</span></span>
+  <span id="scoreTotalRow">TOTAL<span class="scoreValue" id="totalScoreText">0</span></span>
+</div>
 <div id="hint">引く(左右で狙い)→ 前に押し出す(短い=強い/長い=ゆっくり)→ 離す<br>狙いの中心線から横にズレた分だけ回転。左回転=左カーブ。引いたまま放しても投げない</div>
 <div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><button class="btn" id="retryBtn">もう一度</button></div></div>
 
@@ -137,6 +154,9 @@ const CONFIG = {
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
+  SCORE_TURN: 100,       // 1生存ターンあたりの得点
+  SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
+  SCORE_BOARD_MAX: 100,  // 自石1個が中心にある場合の盤面支配点
   FRICTION: 0.985,       // 1フレームごとの基本速度減衰率(回転なしの石)
   /* --- 衝突の並進物理(PROTO23で入射角ベースのモデルへ全面置き換え) ---
    * 旧来のRESTITUTION(反発係数)方式は「正面衝突での配分」しか調整できず、
@@ -333,6 +353,9 @@ const game = {
   shotInProgress: false,
   phase: "aim",
   gameOver: false,
+  score: {
+    enemyTakeouts: 0,
+  },
 };
 
 const ENEMIES = [
@@ -452,6 +475,7 @@ function buildSurvivalGame() {
   game.fastForward = 1;
   game.phase = "aim";
   game.gameOver = false;
+  game.score.enemyTakeouts = 0;
   document.getElementById("gameOver").classList.remove("show");
   createInitialHand();
   updateHUD();
@@ -719,7 +743,8 @@ function showGameOver(enemy) {
   game.launcherReady = false;
   game.aim = null;
   const name = enemy?.enemyName ?? "七つの大罪";
-  document.getElementById("gameOverText").textContent = `${name}が中心に居座った　到達ターン ${game.turn}`;
+  const score = calculateScore();
+  document.getElementById("gameOverText").textContent = `${name}が中心に居座った　到達ターン ${game.turn}　SCORE ${score.total}`;
   document.getElementById("gameOver").classList.add("show");
   renderHand();
 }
@@ -949,7 +974,10 @@ function physicsStep() {
       if (vr >= CONFIG.RIM_EXIT_SPEED) {
         p.state = "exiting";
         p.fallT = 0;
-        if (p.role === "enemy") game.chainCountThisThrow++;
+        if (p.role === "enemy" && game.phase === "playerMoving") {
+          game.chainCountThisThrow++;
+          game.score.enemyTakeouts++;
+        }
         continue;
       }
       if (vr > 0) {
@@ -1298,17 +1326,40 @@ function drawPiece(x, y, r, color, rot, alpha) {
 
 /* ---------- HUD ---------- */
 let lastHUD = "";
+function calculateBoardControl() {
+  const value = game.pieces
+    .filter(p => p.role === "player" && p.state === "onboard" && p.entered)
+    .reduce((sum, p) => {
+      const proximity = clamp(1 - Math.hypot(p.x, p.y) / CONFIG.BOARD_RADIUS, 0, 1);
+      return sum + proximity * CONFIG.SCORE_BOARD_MAX;
+    }, 0);
+  return Math.round(value);
+}
+
+function calculateScore() {
+  const survivedTurns = Math.max(0, game.turn - 1);
+  const survival = survivedTurns * CONFIG.SCORE_TURN;
+  const takeout = game.score.enemyTakeouts * CONFIG.SCORE_TAKEOUT;
+  const board = calculateBoardControl();
+  return { survivedTurns, survival, takeout, board, total: survival + takeout + board };
+}
+
 function updateHUD() {
   const onboard = game.pieces.filter(p => p.state === "onboard" && p.entered).length;
   const enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard").length;
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
-  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.phase;
+  const score = calculateScore();
+  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("countText").textContent = onboard;
   document.getElementById("turnText").textContent = game.turn;
   document.getElementById("enemyCountText").textContent = enemies;
   document.getElementById("phaseText").textContent = phaseNames[game.phase] ?? "";
+  document.getElementById("survivalScoreText").textContent = score.survivedTurns;
+  document.getElementById("takeoutScoreText").textContent = game.score.enemyTakeouts;
+  document.getElementById("boardScoreText").textContent = score.board;
+  document.getElementById("totalScoreText").textContent = score.total;
 }
 
 /* ---------- 入力 ---------- */
