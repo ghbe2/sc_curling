@@ -970,31 +970,54 @@ function drawPredictedShotPath(aim, color) {
     : 0;
   const curveMag = Math.max(CONFIG.CURVE_MIN, Math.abs(rawCurve));
   const coef = pushCoef(aim.pushDist ?? 0);
-  const speedPower = clamp((coef - CONFIG.PUSH_MIN_COEF) / (1 - CONFIG.PUSH_MIN_COEF), 0, 1);
-  const start = toScreen(launcherPos().x, launcherPos().y);
   const guideLen = Math.max(window.innerWidth, window.innerHeight) * 0.92;
-  const perpX = -aim.aimDirY, perpY = aim.aimDirX;
-  // 実物理と同じく、強回転ほど狭く、速いほど直進寄りにする。
-  const speedBendMult = 1.2 - speedPower * 0.72;
-  const characterBend = clamp(mods.pathCurveMult ?? 1, 0.2, 1.65);
-  const bend = Math.abs(bendFromSpin(curveMag)) * speedBendMult * characterBend * guideLen * 0.25;
-  const control = {
-    x: start.x + aim.aimDirX * guideLen * 0.54,
-    y: start.y + aim.aimDirY * guideLen * 0.54,
-  };
+  const guideDistance = guideLen / view.scale;
+  const launch = launcherPos();
+
+  // 投球本体と同じ順序・式で仮想ストーンを進める。停止位置を隠すため、
+  // 停止後だけはその時点の進行方向へ残りのガイドを直線で延長する。
   const makeBoundary = (side) => {
-    const end = {
-      x: start.x + aim.aimDirX * guideLen + perpX * bend * side,
-      y: start.y + aim.aimDirY * guideLen + perpY * bend * side,
-    };
-    const points = [];
-    for (let i = 0; i <= 44; i++) {
-      const t = i / 44, u = 1 - t;
-      points.push({
-        x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
-        y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
-      });
+    const curve = curveMag * side;
+    const initialSpeed = throwSpeedFromPower(CONFIG.MAX_THROW_SPEED, coef) * (mods.speedMult ?? 1);
+    let x = launch.x, y = launch.y;
+    let vx = aim.aimDirX * initialSpeed, vy = aim.aimDirY * initialSpeed;
+    let turned = 0, traveled = 0;
+    let lastDirX = aim.aimDirX, lastDirY = aim.aimDirY;
+    const frictionMult = mods.frictionMult ?? 1;
+    const dt = CONFIG.TIME_SCALE * 0.5;
+    const points = [toScreen(x, y)];
+    for (let step = 0; step < 3600 && traveled < guideDistance; step++) {
+      const speed = Math.hypot(vx, vy);
+      if (speed < CONFIG.SETTLE_SPEED) break;
+      lastDirX = vx / speed; lastDirY = vy / speed;
+      const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
+      if (Math.abs(turned) < CONFIG.CURVE_MAX_ANGLE) {
+        const dTheta = CONFIG.CURVE_STRENGTH * bendFromSpin(curve) * slow * dt * (mods.pathCurveMult ?? 1);
+        const c = Math.cos(dTheta), sn = Math.sin(dTheta);
+        const nextVx = vx * c - vy * sn;
+        const nextVy = vx * sn + vy * c;
+        vx = nextVx; vy = nextVy; turned += dTheta;
+      }
+      const fricEff = Math.pow(CONFIG.FRICTION, dt * frictionMult);
+      vx *= fricEff; vy *= fricEff;
+      const speedAfterFriction = Math.hypot(vx, vy);
+      if (speedAfterFriction > 0) {
+        const speedAfterResistance = Math.max(0, speedAfterFriction - CONFIG.ROLLING_RESISTANCE * dt * frictionMult);
+        const resistanceScale = speedAfterResistance / speedAfterFriction;
+        vx *= resistanceScale; vy *= resistanceScale;
+      }
+      const postSpeed = Math.hypot(vx, vy);
+      if (postSpeed > 0) { lastDirX = vx / postSpeed; lastDirY = vy / postSpeed; }
+      const dx = vx * dt, dy = vy * dt;
+      const stepDistance = Math.hypot(dx, dy);
+      x += dx; y += dy; traveled += stepDistance;
+      if (step % 5 === 0) points.push(toScreen(x, y));
     }
+    if (traveled < guideDistance) {
+      const remaining = guideDistance - traveled;
+      x += lastDirX * remaining; y += lastDirY * remaining;
+    }
+    points.push(toScreen(x, y));
     return points;
   };
   const left = makeBoundary(-1);
@@ -1006,22 +1029,22 @@ function drawPredictedShotPath(aim, color) {
   for (const point of left) ctx.lineTo(point.x, point.y);
   for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
   ctx.closePath();
-  ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},0.11)`;
+  ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},0.065)`;
   ctx.fill();
 
   const neutral = Math.abs(rawCurve) < 0.12;
-  const leftAlpha = neutral ? 0.68 : rawCurve < 0 ? 0.98 : 0.25;
-  const rightAlpha = neutral ? 0.68 : rawCurve > 0 ? 0.98 : 0.25;
+  const leftAlpha = neutral ? 0.48 : rawCurve < 0 ? 0.76 : 0.16;
+  const rightAlpha = neutral ? 0.48 : rawCurve > 0 ? 0.76 : 0.16;
   const strokeBoundary = (points, alpha) => {
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
     ctx.lineCap = "round";
-    ctx.strokeStyle = `rgba(255,255,255,${0.42 + alpha * 0.5})`;
-    ctx.lineWidth = 6;
+    ctx.strokeStyle = `rgba(255,255,255,${0.3 + alpha * 0.45})`;
+    ctx.lineWidth = 5;
     ctx.stroke();
     ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${alpha})`;
-    ctx.lineWidth = alpha > 0.8 ? 3.8 : 2.2;
+    ctx.lineWidth = alpha > 0.6 ? 3.2 : 1.8;
     ctx.stroke();
   };
   strokeBoundary(left, leftAlpha);
