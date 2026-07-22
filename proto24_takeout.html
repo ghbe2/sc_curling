@@ -215,16 +215,22 @@
   .howToHeader h2 { margin: 0; color: #e91e63; font-size: 21px; }
   #howToClose { font-size: 12px; }
   .howToLead { margin: 11px 14px 4px; text-align: center; color: #e91e63; font-size: 12px; }
-  .howToGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 16px; }
+  .howToPage { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 8px; }
+  .howToPage.active { display: grid; }
   .howToCard { overflow: hidden; border: 1px solid #f5b0c8; border-radius: 13px; background: white; box-shadow: 0 3px 10px rgba(80,30,50,0.08); }
   .howToShot { width: 100%; height: 92px; background: #fce4ec; }
   .howToCopy { padding: 8px 9px 10px; font-size: 11px; line-height: 1.55; }
   .howToCopy b { display: block; margin-bottom: 2px; color: #e91e63; font-size: 13px; }
+  .howToPager { position: sticky; bottom: 0; z-index: 2; display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; gap: 8px; padding: 9px 12px 12px; background: rgba(255,248,251,0.97); border-top: 1px solid #f7bfd1; }
+  .howToPager .btn { font-size: 12px; }
+  #howToPageLabel { text-align: center; color: #e91e63; font-size: 12px; letter-spacing: 3px; }
+  #howToPrev:disabled { opacity: .35; }
   @media (max-width: 390px) {
     html, body { --side-panel-width: 92px; }
     #throwTutorial { padding: 7px 6px; font-size: 9px; }
-    .howToGrid { grid-template-columns: 1fr; }
-    .howToShot { height: 86px; }
+    .howToPage { grid-template-columns: 1fr; }
+    .howToShot { height: 76px; }
+    .howToCopy { padding: 6px 8px 7px; font-size: 10px; line-height: 1.4; }
   }
 </style>
 </head>
@@ -262,18 +268,24 @@
 </div>
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
   <div id="howToPanel">
-    <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose">はじめる！</button></div>
+    <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose" aria-label="遊び方を閉じる">×</button></div>
     <p class="howToLead">大罪をはじいて、まんなかの💖を守ろう！</p>
-    <div class="howToGrid">
+    <div class="howToPage active" data-page="0">
       <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① 💖を守ろう</b>すこしずつハートへ迫る大罪を、ハウスの外へはじき出そう。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>② 侵入に注意</b>敵がハウスに入ると、外からさらに敵が増えるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="throw"></canvas><div class="howToCopy"><b>③ えらんで、ねらって、おしだす</b>強く押せばはやく、やさしく押せばおそく進むよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="spin"></canvas><div class="howToCopy"><b>④ 回転でまげる</b>回転をかけた方向へ曲がるよ。強い回転ほど曲がりづらくなる。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="score"></canvas><div class="howToCopy"><b>⑤ 高得点をねらおう</b>敵をはじいたり、ハウスに味方の石を残すとスコアアップ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑥ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑦ 石には特徴がある</b>曲がり方、大きさ、ぶつける力などがキャラごとに違うよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑧ 敵にも特徴がある</b>七つの大罪はそれぞれ違う個性を持つ。動きをよく見よう。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="pinch"></canvas><div class="howToCopy"><b>② 重なったらピンチ！</b>敵が💖に重なったら、そのターンで弾けないとゲームオーバー。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>③ 侵入に注意</b>敵がハウスに入ると、外からさらに敵が増えるよ。</div></article>
     </div>
+    <div class="howToPage" data-page="1">
+      <article class="howToCard"><canvas class="howToShot" data-scene="throw"></canvas><div class="howToCopy"><b>④ えらんで、ねらって、おしだす</b>強く押せばはやく、やさしく押せばおそく進むよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="spin"></canvas><div class="howToCopy"><b>⑤ 回転でまげる</b>回転をかけた方向へ曲がるよ。強い回転ほど曲がりづらくなる。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="score"></canvas><div class="howToCopy"><b>⑥ 高得点をねらおう</b>敵をはじいたり、ハウスに味方の石を残すとスコアアップ。</div></article>
+    </div>
+    <div class="howToPage" data-page="2">
+      <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑦ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>曲がり方、大きさ、ぶつける力などがキャラごとに違うよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>七つの大罪はそれぞれ違う個性を持つ。動きをよく見よう。</div></article>
+    </div>
+    <div class="howToPager"><button class="btn" id="howToPrev">まえ</button><span id="howToPageLabel">● ○ ○</span><button class="btn" id="howToNext">つぎ</button></div>
   </div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
@@ -303,6 +315,11 @@ const CONFIG = {
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
   HIROIBEO_ATTRACTION: 0.42, // 中心58%を残しつつ、最寄りのヒロイベオへ進路を曲げる
+  WUYONG_MOVE_MULT: 1.55,
+  WUYONG_BLAST_RADIUS: 92,
+  WUYONG_BLAST_SPEED: 7.5,
+  JINA_PULL_RADIUS: 185,
+  JINA_PULL_SPEED: 4.2,
   SCORE_WAVE_CLEAR: 2000,
   SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
@@ -514,35 +531,38 @@ const game = {
     enemyTakeouts: 0,
     waveBonus: 0,
     noteBonus: 0,
+    characterBonus: 0,
   },
   noteHits: 0,
   noteBonusAwardedThisThrow: false,
   wave: 1,
   enemySerial: 0,
+  enemyPostMoveApplied: false,
+  enemyAbilityContacts: new Set(),
 };
 
 const ENEMIES = [
-  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72" },
-  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad" },
-  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189" },
-  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91" },
-  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58" },
-  { id: "greed", name: "ジーナ", sin: "強欲", icon: "🦊", color: "#e4e1dc" },
-  { id: "gluttony", name: "デロラス", sin: "暴食", icon: "🐊", color: "#d86e83" },
+  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "接触でムイを生む" },
+  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "味方を小さくする" },
+  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "直接テイクのみ有効" },
+  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "長距離移動・周囲を弾く" },
+  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "レイズテイクのみ有効" },
+  { id: "greed", name: "ジーナ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "毎ターン変身・引力" },
+  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵を大きく重くする" },
 ];
 
 const CHARACTERS = [
-  { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "直進軌道 0.25×", mods: { pathCurveMult: 0.25 } },
-  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "被弾に強い", mods: { knockResist: 0.45 } },
-  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "当たると止まる", mods: { selfStopMult: 0.35 } },
-  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "味方に強・敵に弱", mods: { allyKnockMult: 1.65, enemyKnockMult: 0.55 } },
-  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "摩擦が少ない", mods: { frictionMult: 0.45 } },
-  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "曲線軌道 2.5×", mods: { pathCurveMult: 2.5 } },
+  { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "かなり直進 0.12×", mods: { pathCurveMult: 0.12 } },
+  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "とても飛びづらい", mods: { knockResist: 0.22 } },
+  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "当たると急停止", mods: { selfStopMult: 0.15 } },
+  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "味方に特強・敵に弱", mods: { allyKnockMult: 2.4, enemyKnockMult: 0.32 } },
+  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "かなり滑り続ける", mods: { frictionMult: 0.22 } },
+  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "曲線軌道 4.2×", mods: { pathCurveMult: 4.2 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "敵を引きつける", mods: { enemyAttractor: true } },
-  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "味方に弱・敵に強", mods: { allyKnockMult: 0.55, enemyKnockMult: 1.65 } },
-  { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スタンダード", mods: {} },
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "味方に弱・敵に特強", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4 } },
+  { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "決めると得点 2倍", mods: { scoreMult: 2 } },
   { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
-  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.2×", mods: { radiusScale: 1.2 } },
+  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.3×", mods: { radiusScale: 1.3 } },
   { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
 ];
 
@@ -574,6 +594,7 @@ function renderHand() {
     button.dataset.pathCurveMult = String(character.mods.pathCurveMult ?? 1);
     button.dataset.radiusScale = String(character.mods.radiusScale ?? 1);
     button.dataset.trajectoryGuide = String(character.mods.trajectoryGuide ?? false);
+    button.dataset.scoreMult = String(character.mods.scoreMult ?? 1);
     button.dataset.partType = character.mods.partType ?? "none";
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
     button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>`;
@@ -634,6 +655,9 @@ function createPiece(x, y, role, character = null) {
     takeWasRaise: false,
     hasCollided: false,
     buttonDrawAwarded: false,
+    wobbleSeed: Math.random() * Math.PI * 2,
+    lastTakeRoute: null,
+    abilityUsedTurn: -1,
     characterId: character?.id ?? null,
     characterName: character?.name ?? null,
     icon: character?.icon ?? null,
@@ -651,6 +675,7 @@ function createPiece(x, y, role, character = null) {
       allyKnockMult: 1,
       enemyKnockMult: 1,
       frictionMult: 1,
+      scoreMult: 1,
       ...(character?.mods ?? {}),
     },
   };
@@ -694,6 +719,7 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
   p.color = enemy.color;
   p.spawnAge = -0.001 - Math.min(0.22, (enemyIndex % ENEMIES.length) * 0.035);
   p.spawnPopped = false;
+  if (enemy.id === "greed") p.ginaForm = "jina";
   game.pieces.push(p);
   game.enemySerial++;
   return p;
@@ -706,10 +732,125 @@ function spawnEnemyWave() {
   }
 }
 
+function spawnMuiNear(wenka) {
+  const side = (game.turn + wenka.uid) % 2 === 0 ? 1 : -1;
+  const angle = Math.atan2(wenka.y, wenka.x) + side * Math.PI / 2;
+  const mui = createPiece(wenka.x, wenka.y, "enemy");
+  mui.enemyId = "mui";
+  mui.enemyName = "ムイ（分身）";
+  mui.enemyIcon = "🐻";
+  mui.icon = "🐻";
+  mui.color = "#d9b7aa";
+  mui.mods.radiusScale = 0.58;
+  mui.mods.knockResist = 1.55;
+  const gap = pieceRadius(wenka) + pieceRadius(mui) + 5;
+  mui.x += Math.cos(angle) * gap;
+  mui.y += Math.sin(angle) * gap;
+  mui.entered = Math.hypot(mui.x, mui.y) < CONFIG.BOARD_RADIUS;
+  mui.houseRingsReached = new Set();
+  mui.spawnAge = -0.001;
+  mui.spawnPopped = false;
+  game.pieces.push(mui);
+  addImpactFx(mui.x, mui.y, 1.4, true);
+  playEnemyPopSound();
+}
+
+function applyEnemyContactAbilities(a, b) {
+  const pairKey = a.uid < b.uid ? `${a.uid}:${b.uid}` : `${b.uid}:${a.uid}`;
+  const activateOnce = (ability, action) => {
+    const key = `${ability}:${pairKey}`;
+    if (game.enemyAbilityContacts.has(key)) return;
+    game.enemyAbilityContacts.add(key);
+    action();
+  };
+  for (const [enemy, other] of [[a, b], [b, a]]) {
+    if (enemy.role !== "enemy") continue;
+    if (enemy.enemyId === "sloth" && other.role === "player" && game.phase === "enemyMoving" && enemy.abilityUsedTurn !== game.turn) {
+      enemy.abilityUsedTurn = game.turn;
+      spawnMuiNear(enemy);
+    }
+    if (enemy.enemyId === "envy" && other.role === "player" && !other.shrunkByEno) {
+      activateOnce(`eno:${enemy.uid}`, () => {
+        other.shrunkByEno = true;
+        other.mods.radiusScale = Math.max(0.52, other.mods.radiusScale * 0.68);
+        other.mods.allyKnockMult *= 0.45;
+        other.mods.enemyKnockMult *= 0.45;
+        other.mods.knockResist *= 1.35;
+        addImpactFx(other.x, other.y, 2.2, false);
+        playUiPopSound(310, 0.04);
+      });
+    }
+    if (enemy.enemyId === "gluttony" && other.role === "enemy" && other.uid !== enemy.uid && !other.enlargedByDellorath) {
+      activateOnce(`dellorath:${enemy.uid}`, () => {
+        other.enlargedByDellorath = true;
+        other.mods.radiusScale = Math.min(1.7, other.mods.radiusScale * 1.35);
+        other.mods.knockResist = Math.max(0.32, other.mods.knockResist * 0.5);
+        addImpactFx(other.x, other.y, 2.6, true);
+        playEnemyPopSound();
+      });
+    }
+  }
+}
+
+function applyEnemyPostMoveAbilities() {
+  let moved = false;
+  const pieces = game.pieces.filter(p => p.state === "onboard");
+  for (const enemy of pieces.filter(p => p.role === "enemy")) {
+    if (enemy.enemyId === "wrath") {
+      for (const target of pieces.filter(p => p.uid !== enemy.uid)) {
+        const dx = target.x - enemy.x, dy = target.y - enemy.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= 0 || distance > CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) continue;
+        const speed = CONFIG.WUYONG_BLAST_SPEED * (1 - distance / (CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) * 0.45);
+        target.vx += dx / distance * speed;
+        target.vy += dy / distance * speed;
+        moved = true;
+      }
+      addImpactFx(enemy.x, enemy.y, 5.5, true);
+    }
+    if (enemy.enemyId === "greed") {
+      const targetRole = enemy.ginaForm === "mami" ? "player" : "enemy";
+      for (const target of pieces) {
+        if (target.uid === enemy.uid || target.role !== targetRole) continue;
+        const dx = enemy.x - target.x, dy = enemy.y - target.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= 0 || distance > CONFIG.JINA_PULL_RADIUS) continue;
+        const speed = CONFIG.JINA_PULL_SPEED * (1 - distance / CONFIG.JINA_PULL_RADIUS * 0.55);
+        target.vx += dx / distance * speed;
+        target.vy += dy / distance * speed;
+        moved = true;
+      }
+      addImpactFx(enemy.x, enemy.y, 3.4, false);
+    }
+  }
+  if (moved) playUiPopSound(135, 0.06);
+  return moved;
+}
+
+function toggleGinaForms() {
+  for (const enemy of game.pieces) {
+    if (enemy.role !== "enemy" || enemy.enemyId !== "greed" || enemy.state !== "onboard") continue;
+    enemy.ginaForm = enemy.ginaForm === "jina" ? "mami" : "jina";
+    const isMami = enemy.ginaForm === "mami";
+    enemy.icon = isMami ? "🦝" : "🦊";
+    enemy.enemyIcon = enemy.icon;
+    enemy.enemyName = isMami ? "マミ（強欲）" : "ジーナ（強欲）";
+    enemy.color = isMami ? "#c8bbb0" : "#e4e1dc";
+  }
+}
+
+function enemyTakeGuardMessage(enemy) {
+  if (enemy.enemyId === "pride" && enemy.lastTakeRoute !== "raise") return "れいずでねらって！";
+  if (enemy.enemyId === "lust" && enemy.lastTakeRoute !== "direct") return "ちょくせつねらって！";
+  return "";
+}
+
 function buildSurvivalGame() {
   game.pieces = [];
   game.wave = 1;
   game.enemySerial = 0;
+  game.enemyPostMoveApplied = false;
+  game.enemyAbilityContacts = new Set();
   spawnEnemyWave();
   game.launcherReady = true;
   game.aim = null;
@@ -729,6 +870,7 @@ function buildSurvivalGame() {
   game.score.enemyTakeouts = 0;
   game.score.waveBonus = 0;
   game.score.noteBonus = 0;
+  game.score.characterBonus = 0;
   game.noteHits = 0;
   game.noteBonusAwardedThisThrow = false;
   game.hitStopFrames = 0;
@@ -1041,7 +1183,12 @@ function throwPiece(params) {
   const character = game.hand[handIndex];
   if (!character) return;
   const launch = launcherPos();
-  for (const oldPiece of game.pieces) oldPiece.isCurrentShot = false;
+  for (const oldPiece of game.pieces) {
+    oldPiece.isCurrentShot = false;
+    oldPiece.indirectFromShot = false;
+    oldPiece.takeWasRaise = false;
+    oldPiece.lastTakeRoute = null;
+  }
   const p = createPiece(launch.x, launch.y, "player", character);
   p.isCurrentShot = true;
   const speed = params.speed * p.mods.speedMult;
@@ -1077,6 +1224,7 @@ function completeTurn() {
   game.phase = "aim";
   game.buttonDanger = Boolean(enemyAtCenter());
   game.turnAlertLevel = game.buttonDanger ? "pinch" : (enemyOnHouse() ? "house" : "none");
+  toggleGinaForms();
   renderHand();
 }
 
@@ -1270,6 +1418,8 @@ function showGameOver(enemy) {
 
 function startEnemyAdvance() {
   game.turnAlertLevel = "none";
+  game.enemyPostMoveApplied = false;
+  game.enemyAbilityContacts = new Set();
   let enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
   if (enemies.length === 0) {
     game.score.waveBonus += CONFIG.SCORE_WAVE_CLEAR;
@@ -1289,7 +1439,8 @@ function startEnemyAdvance() {
   for (const enemy of enemies) {
     const distance = Math.hypot(enemy.x, enemy.y);
     if (distance < 0.001) continue;
-    const speed = baseSpeed * (enemy === pressureEnemy ? CONFIG.ENEMY_PRESSURE_MULT : 1);
+    const abilityMoveMult = enemy.enemyId === "wrath" ? CONFIG.WUYONG_MOVE_MULT : 1;
+    const speed = baseSpeed * (enemy === pressureEnemy ? CONFIG.ENEMY_PRESSURE_MULT : 1) * abilityMoveMult;
     let dirX = -enemy.x / distance;
     let dirY = -enemy.y / distance;
     if (attractors.length > 0) {
@@ -1338,6 +1489,10 @@ function handleAllPiecesSettled() {
     return;
   }
   if (game.phase === "enemyMoving") {
+    if (!game.enemyPostMoveApplied) {
+      game.enemyPostMoveApplied = true;
+      if (applyEnemyPostMoveAbilities()) return;
+    }
     const ringThresholds = [
         CONFIG.HOUSE_RADIUS,
         CONFIG.HOUSE_RADIUS * (2 / 3),
@@ -1498,7 +1653,7 @@ function physicsStep() {
     }
 
     // ピース間の弾性衝突
-    const arr = game.pieces;
+    const arr = [...game.pieces];
     for (let i = 0; i < arr.length; i++) {
       const a = arr[i];
       if (a.state !== "onboard") continue;
@@ -1549,6 +1704,15 @@ function physicsStep() {
             T.indirectFromShot = true;
             if (!S.isCurrentShot && T.role === "enemy") T.takeWasRaise = true;
           }
+          if (T.role === "enemy" && game.phase === "playerMoving") {
+            if (S.isCurrentShot) {
+              T.lastTakeRoute = "direct";
+              T.takeWasRaise = false;
+            } else if (S.indirectFromShot) {
+              T.lastTakeRoute = "raise";
+              T.takeWasRaise = true;
+            }
+          }
 
           if (relSpeed > 0.001) {
             const relVx = S.vx - T.vx, relVy = S.vy - T.vy;
@@ -1573,6 +1737,8 @@ function physicsStep() {
             tSpeed *= lowSpeedDamping;
             const targetRelationMult = T.role === "enemy" ? S.mods.enemyKnockMult : S.mods.allyKnockMult;
             tSpeed *= targetRelationMult;
+            if (T.enemyId === "pride" && S.isCurrentShot) tSpeed *= 0.08;
+            if (T.enemyId === "lust" && S.indirectFromShot && !S.isCurrentShot) tSpeed *= 0.08;
             const enemyAdvancePush = game.phase === "enemyMoving" && S.role === "enemy" && T.role === "player";
             if (enemyAdvancePush) tSpeed *= 2.0;
             sSpeed *= S.mods.selfStopMult;
@@ -1629,6 +1795,7 @@ function physicsStep() {
             }
           }
 
+          applyEnemyContactAbilities(a, b);
           if (impact > 0.7) registerCollisionHit(a, b, impact);
           // 衝突演出:強さに応じた短い停止、衝撃リング、粒、画面揺れ。
           if (impact > CONFIG.FX_MIN_IMPACT) {
@@ -1660,11 +1827,27 @@ function physicsStep() {
       const nx = p.x / r, ny = p.y / r;
       const vr = p.vx * nx + p.vy * ny;
       if (vr >= CONFIG.RIM_EXIT_SPEED) {
+        const guardMessage = p.role === "enemy" && game.phase === "playerMoving" ? enemyTakeGuardMessage(p) : "";
+        if (guardMessage) {
+          p.x = nx * limit;
+          p.y = ny * limit;
+          p.vx = 0;
+          p.vy = 0;
+          if (p.guardShownTurn !== game.turn) {
+            p.guardShownTurn = game.turn;
+            showToast(guardMessage);
+            addImpactFx(p.x, p.y, 4.5, true);
+          }
+          continue;
+        }
         p.state = "exiting";
         p.fallT = 0;
         if (p.role === "enemy" && game.phase === "playerMoving") {
           game.chainCountThisThrow++;
           game.score.enemyTakeouts++;
+          const currentShot = game.pieces.find(piece => piece.isCurrentShot);
+          const scoreMult = currentShot?.mods?.scoreMult ?? 1;
+          if (scoreMult > 1) game.score.characterBonus += CONFIG.SCORE_TAKEOUT * (scoreMult - 1);
           addImpactFx(p.x, p.y, 7, true);
           if (p.takeWasRaise) showToast("れいずていくっ！");
           if (game.chainCountThisThrow === 2) showChainToast(2);
@@ -2105,12 +2288,18 @@ function render() {
   ctx.beginPath();
   const selectedCharacter = game.selectedHandIndex === null ? null : game.hand[game.selectedHandIndex];
   const launcherRadius = CONFIG.PIECE_RADIUS * (selectedCharacter?.mods?.radiusScale ?? 1) * view.scale;
+  const launcherWobbling = game.launcherReady && selectedCharacter && !a && !game.lockedAim;
+  const launcherWobble = launcherWobbling ? performance.now() / 430 : 0;
+  if (launcherWobbling) {
+    stoneX += Math.sin(launcherWobble) * 1.5;
+    stoneY += Math.cos(launcherWobble * 0.83) * 1.1;
+  }
   ctx.arc(launchBase.x, launchBase.y, launcherRadius * 1.15, 0, Math.PI * 2);
   ctx.strokeStyle = game.launcherReady ? "rgba(74,33,51,0.82)" : "rgba(74,33,51,0.2)";
   ctx.lineWidth = 2;
   ctx.stroke();
   if (game.launcherReady && selectedCharacter) {
-    drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1, selectedCharacter?.mods?.partType, selectedCharacter?.icon);
+    drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, launcherWobbling ? Math.sin(launcherWobble * 0.9) * 0.035 : 0, 1, selectedCharacter?.mods?.partType, selectedCharacter?.icon);
   }
 
   if (!a && game.lockedAim) {
@@ -2197,8 +2386,16 @@ function render() {
 
   for (const p of game.pieces) {
     const s = toScreen(p.x, p.y);
+    let drawX = s.x, drawY = s.y, drawRot = p.rot;
     let r = pieceRadius(p) * view.scale;
     let alpha = 1;
+    const restingWobble = game.phase === "aim" && !game.aim && !game.lockedAim && p.state === "onboard" && p.vx === 0 && p.vy === 0;
+    if (restingWobble) {
+      const t = performance.now() / 520 + p.wobbleSeed;
+      drawX += Math.sin(t) * 1.15;
+      drawY += Math.cos(t * 0.87) * 0.85;
+      drawRot += Math.sin(t * 0.72) * 0.025;
+    }
     if (p.state === "exiting") {
       const t = Math.min(1, p.fallT / 0.5);
       r *= 1 - 0.7 * t;
@@ -2216,7 +2413,7 @@ function render() {
         alpha *= clamp(t * 2.3, 0, 1);
       }
     }
-    drawPiece(s.x, s.y, r, p.color ?? ROLE_COLOR[p.role], p.rot, alpha, p.mods.partType, p.icon, p.role === "enemy");
+    drawPiece(drawX, drawY, r, p.color ?? ROLE_COLOR[p.role], drawRot, alpha, p.mods.partType, p.icon, p.role === "enemy");
   }
 
   ctx.restore(); // 衝突演出の変換を解除
@@ -2306,7 +2503,7 @@ function calculateBoardControl() {
     .filter(p => p.role === "player" && p.state === "onboard" && p.entered)
     .reduce((sum, p) => {
       const proximity = clamp(1 - Math.hypot(p.x, p.y) / CONFIG.HOUSE_RADIUS, 0, 1);
-      return sum + proximity * CONFIG.SCORE_BOARD_MAX;
+      return sum + proximity * CONFIG.SCORE_BOARD_MAX * (p.mods.scoreMult ?? 1);
     }, 0);
   return Math.round(value);
 }
@@ -2318,7 +2515,8 @@ function calculateScore() {
   const board = calculateBoardControl();
   const waveBonus = game.score.waveBonus;
   const noteBonus = game.score.noteBonus;
-  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, total: survival + takeout + board + waveBonus + noteBonus };
+  const characterBonus = game.score.characterBonus;
+  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, characterBonus, total: survival + takeout + board + waveBonus + noteBonus + characterBonus };
 }
 
 function updateDangerAlert() {
@@ -2346,7 +2544,7 @@ function updateHUD() {
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
   const score = calculateScore();
   updateDangerAlert();
-  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.noteBonus + "|" + game.noteHits;
+  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.noteBonus + "|" + score.characterBonus + "|" + game.noteHits;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("totalScoreText").textContent = score.total;
@@ -2468,6 +2666,10 @@ function drawHowToShots() {
       house(w * .5, h * .48, 33); label("💖", w * .5, h * .48, "#e91e63", 18);
       stone(w * .18, h * .25, "🐻", true); stone(w * .8, h * .7, "🐊", true);
       arrow(w * .26, h * .29, w * .41, h * .42); arrow(w * .72, h * .66, w * .59, h * .54);
+    } else if (scene === "pinch") {
+      house(w * .42, h * .5, 34); label("💖", w * .42, h * .5, "#e91e63", 18); stone(w * .42, h * .5, "🦁", true, 14);
+      label("ピンチ！", w * .76, h * .3, "#c40030", 15); arrow(w * .68, h * .7, w * .52, h * .57, "#c40030");
+      label("このターンで弾く", w * .75, h * .83, "#4a2133", 9);
     } else if (scene === "reinforce") {
       house(w * .43, h * .5, 34); stone(w * .43, h * .34, "🦁", true); arrow(w * .83, h * .3, w * .64, h * .39); stone(w * .88, h * .24, "🦊", true); label("＋ なかま！", w * .76, h * .72);
     } else if (scene === "throw") {
@@ -2494,13 +2696,31 @@ function bindHowTo() {
   const overlay = document.getElementById("howToOverlay");
   const openButton = document.getElementById("howToBtn");
   const closeButton = document.getElementById("howToClose");
-  if (!overlay || !openButton || !closeButton) return;
-  const open = () => { overlay.classList.add("show"); requestAnimationFrame(drawHowToShots); };
+  const prevButton = document.getElementById("howToPrev");
+  const nextButton = document.getElementById("howToNext");
+  const pageLabel = document.getElementById("howToPageLabel");
+  const panel = document.getElementById("howToPanel");
+  if (!overlay || !openButton || !closeButton || !prevButton || !nextButton || !pageLabel) return;
+  let page = 0;
+  const renderPage = () => {
+    document.querySelectorAll(".howToPage").forEach((el, index) => el.classList.toggle("active", index === page));
+    prevButton.disabled = page === 0;
+    nextButton.textContent = page === 2 ? "はじめる！" : "つぎ";
+    pageLabel.textContent = [0, 1, 2].map(index => index === page ? "●" : "○").join("  ");
+    if (panel) panel.scrollTop = 0;
+    requestAnimationFrame(drawHowToShots);
+  };
+  const open = () => { page = 0; overlay.classList.add("show"); renderPage(); };
   const close = () => overlay.classList.remove("show");
   openButton.addEventListener("click", (e) => { e.stopPropagation(); open(); });
   closeButton.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  prevButton.addEventListener("click", (e) => { e.stopPropagation(); if (page > 0) { page--; renderPage(); } });
+  nextButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (page < 2) { page++; renderPage(); } else { close(); }
+  });
   overlay.addEventListener("pointerdown", (e) => e.stopPropagation());
-  requestAnimationFrame(drawHowToShots);
+  renderPage();
 }
 
 function bindUiSwap() {
