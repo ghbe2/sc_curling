@@ -46,7 +46,7 @@
   #resetBtn { background: rgba(255,255,255,0.96); border-color: #f48fb1; }
   #resetBtn:active { background: #5c4646; }
   #handBar {
-    position: fixed; right: 6px; top: 32%;
+    position: fixed; right: 6px; top: auto; bottom: 78px;
     transform: none;
     display: grid; grid-template-columns: 74px; gap: 6px;
     z-index: 3;
@@ -135,17 +135,17 @@
   #scorePanel .scoreValue { color: #e91e63; font-weight: 700; margin-left: 4px; }
   #scoreTotalRow { grid-column: 1 / -1; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.1); }
   #fastForwardBtn {
-    position: fixed; right: 6px; top: calc(32% + 230px); z-index: 3;
-    width: 74px; padding: 8px 4px;
-    color: #e91e63; background: rgba(255,255,255,0.96);
-    border-color: #f48fb1;
+    position: fixed; right: 8px; top: auto; bottom: 10px; z-index: 3;
+    width: 78px; height: 52px; padding: 6px 3px;
+    color: #236f9b; background: rgba(235,249,255,0.97);
+    border-color: #64b5f6; font-size: 12px; font-weight: 700;
     touch-action: none;
   }
   #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
   #fastForwardBtn.hidden { opacity: 0; pointer-events: none; }
   #throwTutorial {
-    position: fixed; left: 7px; top: 64px; z-index: 2;
-    width: 94px; padding: 9px 8px; box-sizing: border-box;
+    position: fixed; left: 7px; top: auto; bottom: 10px; z-index: 2;
+    width: 104px; padding: 9px 8px; box-sizing: border-box;
     border: 2px solid #f48fb1; border-radius: 12px;
     background: rgba(255,255,255,0.92); color: #4a2133;
     font: 10px/1.35 'DotGothic16', system-ui, sans-serif;
@@ -155,12 +155,27 @@
   .tutorialStep { margin-bottom: 9px; opacity: 0.46; }
   .tutorialStep.active { opacity: 1; color: #e91e63; }
   .tutorialTitle { display: block; margin-bottom: 3px; font-size: 11px; }
-  .tutorialGesture { font-size: 19px; line-height: 1; text-align: center; margin: 4px 0; }
+  .tutorialGesture { position: relative; height: 38px; font-size: 21px; line-height: 1; text-align: center; margin: 2px 0; }
+  .gestureFinger { position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
+  #tutorialAim.active .gestureFinger { animation: aimFinger 1.5s ease-in-out infinite; }
+  #tutorialPower.active .gestureFinger { animation: throwFinger 1.15s ease-in-out infinite; }
+  .gestureArrow { position: absolute; left: 0; right: 0; top: 0; color: #ff4081; font-size: 17px; }
+  @keyframes aimFinger {
+    0% { transform: translate(-50%, -7px); }
+    35% { transform: translate(-50%, 13px); }
+    55% { transform: translate(-78%, 13px); }
+    75% { transform: translate(-22%, 13px); }
+    100% { transform: translate(-50%, -7px); }
+  }
+  @keyframes throwFinger { from { transform: translate(-50%, 15px); } to { transform: translate(-50%, -8px); } }
   .tutorialMeter { height: 7px; overflow: hidden; border-radius: 9px; background: #f4dce5; }
   .tutorialFill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg,#81d4fa,#ff4081); transition: width 0.05s; }
+  #spinMeter { position: relative; overflow: visible; }
+  #spinMeter::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 11px; background: #4a2133; transform: translateX(-1px); }
+  #spinFill { position: absolute; left: 50%; width: 0; background: #ff4081; transition: width 0.05s, left 0.05s; }
   #spinReadout { text-align: center; margin-top: 3px; min-height: 14px; }
   @media (max-width: 390px) {
-    #throwTutorial { width: 82px; padding: 7px 6px; font-size: 9px; }
+    #throwTutorial { width: 92px; padding: 7px 6px; font-size: 9px; }
   }
 </style>
 </head>
@@ -186,11 +201,11 @@
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
 </div>
-<button class="btn" id="fastForwardBtn">▶▶<br>はやおくり</button>
+<button class="btn" id="fastForwardBtn">▶▶<br>まてない！</button>
 <div id="throwTutorial">
-  <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">① ねらう</b><div class="tutorialGesture">↙ ↓ ↘</div>引いて、はなす</div>
-  <div class="tutorialStep" id="tutorialPower"><b class="tutorialTitle">② パワー</b><div class="tutorialGesture">☝</div>前へおす<div class="tutorialMeter"><div class="tutorialFill" id="powerFill"></div></div><div id="powerReadout">―</div></div>
-  <div class="tutorialStep" id="tutorialSpin"><b class="tutorialTitle">＋ かいてん</b><div class="tutorialGesture">← ☝ →</div>横にずらす<div class="tutorialMeter"><div class="tutorialFill" id="spinFill"></div></div><div id="spinReadout">まっすぐ</div></div>
+  <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">① ねらう</b><div class="tutorialGesture"><span class="gestureArrow">↓　↔</span><span class="gestureFinger">👆</span></div><b>下へ引いて左右へ</b><br>きまったら離す<br><small>もう一度引くとやりなおし</small></div>
+  <div class="tutorialStep" id="tutorialPower"><b class="tutorialTitle">② なげる</b><div class="tutorialGesture"><span class="gestureArrow">↑</span><span class="gestureFinger">👆</span></div><b>上へ押して離す</b><div class="tutorialMeter"><div class="tutorialFill" id="powerFill"></div></div><div id="powerReadout">―</div></div>
+  <div class="tutorialStep" id="tutorialSpin"><b class="tutorialTitle">かいてん</b><div class="tutorialMeter" id="spinMeter"><div class="tutorialFill" id="spinFill"></div></div><div id="spinReadout">←　まっすぐ　→</div></div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
 <div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><button class="btn" id="retryBtn">もう一度</button></div></div>
@@ -702,11 +717,15 @@ function updateThrowTutorial() {
   const powerFill = document.getElementById("powerFill");
   const spinFill = document.getElementById("spinFill");
   if (powerFill) powerFill.style.width = `${Math.round(power * 100)}%`;
-  if (spinFill) spinFill.style.width = `${Math.round(Math.abs(curve) * 100)}%`;
+  if (spinFill) {
+    const extent = Math.round(Math.abs(curve) * 50);
+    spinFill.style.width = `${extent}%`;
+    spinFill.style.left = curve < 0 ? `${50 - extent}%` : "50%";
+  }
   const powerText = document.getElementById("powerReadout");
   if (powerText) powerText.textContent = !launching ? "照準をきめてね" : power > 0.72 ? "つよい！" : power > 0.35 ? "ふつう" : "よわい";
   const spinText = document.getElementById("spinReadout");
-  if (spinText) spinText.textContent = Math.abs(curve) < 0.12 ? "まっすぐ" : curve < 0 ? `ひだり ${Math.round(Math.abs(curve) * 100)}%` : `みぎ ${Math.round(Math.abs(curve) * 100)}%`;
+  if (spinText) spinText.textContent = Math.abs(curve) < 0.12 ? "←　まっすぐ　→" : curve < 0 ? `← ひだり ${Math.round(Math.abs(curve) * 100)}%` : `みぎ ${Math.round(Math.abs(curve) * 100)}% →`;
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
