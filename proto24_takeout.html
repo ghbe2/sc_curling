@@ -201,7 +201,7 @@
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
 </div>
-<button class="btn" id="fastForwardBtn">▶▶<br>はやく♡</button>
+<button class="btn" id="fastForwardBtn">はやく♡</button>
 <div id="throwTutorial">
   <button id="tutorialToggle" type="button" aria-expanded="true">− とじる</button>
   <div class="tutorialBody">
@@ -328,7 +328,8 @@ const CONFIG = {
                           // 数十px戻ることがあり、10だと「引き直し」と誤認され押し出しが
                           // キャンセルされてしまっていた
   MIN_PUSH_DIST: 15,     // 押し出しがこの距離未満のままのリリースは投げない(=引いて放しただけでは飛ばない)
-  PUSH_MAX_POWER_RANGE: 65, // この距離まで押せば最大。石の直近まで戻さなくても全力になる余裕を持たせる
+  PUSH_MIN_POWER_RANGE: 58, // 約1〜2石分は前へ押しても最弱のまま。キャンセル操作との誤認を防ぐ
+  PUSH_MAX_POWER_RANGE: 145, // 最弱維持ゾーンを越えてから、この距離で最大になる
                           // 「猶予」区間。最大パワーを出せる範囲が実質1点(pushDist=0)しかなく
                           // 操作しづらいとの指摘があったため、序盤に平坦なゾーンを設けて緩和した。
                           // 40→20→15(PROTO23):PUSH_SOFT_RANGE短縮とあわせ、可動域をさらにコンパクトに
@@ -378,7 +379,7 @@ const CONFIG = {
 
   /* --- 投球UI:パワー(色)とカーブ範囲(扇)の可視化 --- */
   POWER_COLOR_STRONG: [230, 40, 30],   // 短い押し出し=強いショットの色(赤)
-  POWER_COLOR_WEAK: [255, 214, 200],   // 長い押し出し=弱いショットの色(淡いパステル)
+  POWER_COLOR_WEAK: [70, 145, 235],    // 遅いショット=青。背景に埋もれず、速さは色だけで伝える
   FAN_MAX_ANGLE: 0.46,   // 回転が最大(1.0)のときの扇の半開き角(rad、約26°)。大きく曲がる可能性を広く見せる
   FAN_MIN_ANGLE: 0.05,   // 回転が最小(CURVE_MIN)のときの扇の半開き角(rad、約3°)。ほぼ直線に近い狭さ
 
@@ -744,7 +745,7 @@ function updateThrowTutorial() {
   const powerText = document.getElementById("powerReadout");
   if (powerText) powerText.textContent = !launching ? "ねらいをきめてね" : power > 0.72 ? "はやい！" : power > 0.35 ? "ふつう" : "おそい";
   const spinText = document.getElementById("spinReadout");
-  if (spinText) spinText.textContent = Math.abs(curve) < 0.12 ? "まっすぐ" : curve < 0 ? "← 左に曲がる" : "右に曲がる →";
+  if (spinText) spinText.textContent = Math.abs(curve) < 0.12 ? "" : curve < 0 ? "← 左回転" : "右回転 →";
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
@@ -825,9 +826,19 @@ function updateAim(px, py) {
 
 // 押し出し距離→パワー係数(前へ押すほど強くなる直感操作)
 function pushCoef(pushDist) {
-  const t = clamp(pushDist / CONFIG.PUSH_MAX_POWER_RANGE, 0, 1);
-  const eased = Math.pow(t, 0.72);
+  if (pushDist <= CONFIG.PUSH_MIN_POWER_RANGE) return CONFIG.PUSH_MIN_COEF;
+  const t = clamp((pushDist - CONFIG.PUSH_MIN_POWER_RANGE) / (CONFIG.PUSH_MAX_POWER_RANGE - CONFIG.PUSH_MIN_POWER_RANGE), 0, 1);
+  const eased = Math.pow(t, 0.82);
   return CONFIG.PUSH_MIN_COEF + (1 - CONFIG.PUSH_MIN_COEF) * eased;
+}
+
+// 回転量と曲がりの関係。弱回転ほど氷を捉えて大きく曲がり、強回転ほど直進する。
+// ガイドと実際の物理の両方がこの関数を使い、表示と挙動の逆転を防ぐ。
+function bendFromSpin(curve) {
+  const sign = Math.sign(curve) || 1;
+  const spinT = clamp((Math.abs(curve) - CONFIG.CURVE_MIN) / (1 - CONFIG.CURVE_MIN), 0, 1);
+  const bendMag = 1 - spinT * (1 - CONFIG.CURVE_MIN);
+  return sign * bendMag;
 }
 
 // 最弱速度と最大速度を両端として、操作パワーを実際の初速へ変換する。
@@ -949,61 +960,34 @@ function completeTurn() {
   renderHand();
 }
 
-// 現在の入力を、実際の回頭・摩擦・転がり抵抗と同じ式で仮想的に滑らせる。
-// 衝突だけは未来の相手位置に左右されるため含めず、最初に何も当たらなかった場合の軌道を示す。
+// 停止位置は明かさず、一定長の線でショット方向と曲がり方だけを示す。
+// 速さは線の長さではなく色（青→赤）で表現する。
 function drawPredictedShotPath(aim, color) {
   const character = game.hand[game.selectedHandIndex];
   const mods = character?.mods ?? {};
-  const base = CONFIG.MAX_THROW_SPEED;
-  let speed = throwSpeedFromPower(base, pushCoef(aim.pushDist)) * (mods.speedMult ?? 1);
   let curve = Number.isFinite(aim.fx) && Number.isFinite(aim.fy)
     ? lateralCurveAt(aim, aim.fx, aim.fy)
     : CONFIG.CURVE_MIN;
   if (Math.abs(curve) < CONFIG.CURVE_MIN) curve = (curve < 0 ? -1 : 1) * CONFIG.CURVE_MIN;
-  let vx = aim.aimDirX * speed;
-  let vy = aim.aimDirY * speed;
-  let x = launcherPos().x;
-  let y = launcherPos().y;
-  let turned = 0;
-  const frictionMult = mods.frictionMult ?? 1;
-  const dt = CONFIG.TIME_SCALE * 0.5;
-
+  const start = toScreen(launcherPos().x, launcherPos().y);
+  const guideLen = Math.max(window.innerWidth, window.innerHeight) * 0.92;
+  const perpX = -aim.aimDirY, perpY = aim.aimDirX;
+  const bend = clamp(bendFromSpin(curve) * (mods.pathCurveMult ?? 1), -1.5, 1.5) * guideLen * 0.28;
   ctx.beginPath();
-  const start = toScreen(x, y);
   ctx.moveTo(start.x, start.y);
-  for (let step = 0; step < 1800 && speed >= CONFIG.SETTLE_SPEED; step++) {
-    const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
-    if (Math.abs(turned) < CONFIG.CURVE_MAX_ANGLE) {
-      const dTheta = CONFIG.CURVE_STRENGTH * curve * slow * dt * (mods.pathCurveMult ?? 1);
-      const c = Math.cos(dTheta), sn = Math.sin(dTheta);
-      const nvx = vx * c - vy * sn;
-      const nvy = vx * sn + vy * c;
-      vx = nvx; vy = nvy; turned += dTheta;
-    }
-    const fricEff = Math.pow(CONFIG.FRICTION, dt * frictionMult);
-    vx *= fricEff; vy *= fricEff;
-    const afterFriction = Math.hypot(vx, vy);
-    if (afterFriction > 0) {
-      const afterResistance = Math.max(0, afterFriction - CONFIG.ROLLING_RESISTANCE * dt * frictionMult);
-      const scale = afterResistance / afterFriction;
-      vx *= scale; vy *= scale;
-    }
-    x += vx * dt; y += vy * dt;
-    speed = Math.hypot(vx, vy);
-    if (step % 8 === 0) {
-      const point = toScreen(x, y);
-      ctx.lineTo(point.x, point.y);
-    }
-    // 発射地点は盤外にあるため、距離だけで打ち切ると数pxでガイドが消える。
-    // 停止するか十分な予測時間に達するまで、盤外から入ってくる区間も描き切る。
-  }
+  ctx.quadraticCurveTo(
+    start.x + aim.aimDirX * guideLen * 0.56,
+    start.y + aim.aimDirY * guideLen * 0.56,
+    start.x + aim.aimDirX * guideLen + perpX * bend,
+    start.y + aim.aimDirY * guideLen + perpY * bend
+  );
   ctx.lineCap = "round";
   ctx.setLineDash([]);
   // ピンク背景や最弱パワーでも消えないよう、白い縁取りの上に濃い紫を重ねる。
   ctx.strokeStyle = "rgba(255,255,255,0.92)";
   ctx.lineWidth = 7;
   ctx.stroke();
-  ctx.strokeStyle = "rgba(123,63,228,0.92)";
+  ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.94)`;
   ctx.lineWidth = 3.5;
   ctx.stroke();
   ctx.setLineDash([]);
@@ -1206,7 +1190,7 @@ function physicsStep() {
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
       const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
       if (p.curve && Math.abs(p.curveTurned) < CONFIG.CURVE_MAX_ANGLE) {
-        const dTheta = CONFIG.CURVE_STRENGTH * p.curve * slow * k * p.mods.pathCurveMult;
+        const dTheta = CONFIG.CURVE_STRENGTH * bendFromSpin(p.curve) * slow * k * p.mods.pathCurveMult;
         const c = Math.cos(dTheta), sn = Math.sin(dTheta);
         const nvx = p.vx * c - p.vy * sn;
         const nvy = p.vx * sn + p.vy * c;
@@ -1835,7 +1819,7 @@ function render() {
   const guideAim = a ?? game.lockedAim;
   if (!a && game.lockedAim) {
     // 照準決定直後から、現在の最弱速度で実軌道ガイドを見せる。
-    drawPredictedShotPath(game.lockedAim, { r: 123, g: 63, b: 228 });
+    drawPredictedShotPath(game.lockedAim, powerColor(pushCoef(0)));
     ctx.fillStyle = "#e91e63";
     ctx.font = "700 13px 'DotGothic16', sans-serif";
     ctx.textAlign = "center";
