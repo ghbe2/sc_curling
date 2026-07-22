@@ -152,7 +152,7 @@
     pointer-events: none; transition: opacity 0.15s, width 0.15s;
   }
   #throwTutorial.hidden { opacity: 0; }
-  #tutorialToggle { position: absolute; right: 0; top: auto; bottom: -25px; border: 2px solid #f48fb1; border-radius: 0 0 9px 9px; padding: 3px 8px; color: #e91e63; background: #fff; font: 9px 'DotGothic16', sans-serif; pointer-events: auto; }
+  #tutorialToggle { position: absolute; right: 0; top: auto; bottom: -23px; border: 0; border-radius: 8px; padding: 3px 7px; color: #e91e63; background: #fff0f5; box-shadow: 0 2px 7px rgba(80,30,50,0.14); font: 9px 'DotGothic16', sans-serif; pointer-events: auto; }
   #throwTutorial.minimized { width: 76px; padding: 8px; }
   #throwTutorial.minimized .tutorialBody { display: none; }
   #throwTutorial.minimized #tutorialToggle { position: static; width: 100%; }
@@ -995,10 +995,14 @@ function drawPredictedShotPath(aim, color) {
     }
     if (Math.hypot(x, y) > CONFIG.OUT_RADIUS * 1.15) break;
   }
-  ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.78)`;
-  ctx.lineWidth = 3;
   ctx.lineCap = "round";
   ctx.setLineDash([10, 7]);
+  // ピンク背景や最弱パワーでも消えないよう、白い縁取りの上に濃い紫を重ねる。
+  ctx.strokeStyle = "rgba(255,255,255,0.92)";
+  ctx.lineWidth = 7;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(123,63,228,0.92)";
+  ctx.lineWidth = 3.5;
   ctx.stroke();
   ctx.setLineDash([]);
 }
@@ -1761,11 +1765,12 @@ function render() {
   }
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  const heartFloat = Math.sin(performance.now() / 430) * 3;
   ctx.fillStyle = "#e91e63";
-  ctx.font = `700 ${Math.max(15, hR / 9)}px 'DotGothic16', sans-serif`;
-  ctx.fillText("♡", 0, 1);
+  ctx.font = `${Math.max(16, hR / 8)}px 'Apple Color Emoji','Segoe UI Emoji',sans-serif`;
+  ctx.fillText("💖", 0, 1 + heartFloat);
   ctx.font = `700 ${Math.max(11, hR / 13)}px 'DotGothic16', sans-serif`;
-  ctx.fillText("♡を守れ！", 0, hR + 18);
+  ctx.fillText("💖を守れ！", 0, hR + 18);
 
   // 格子ガイド(デバッグ表示用):狙い位置↔着地位置を数値で共有しやすくするための目安線。
   // 盤の円でクリップしてから、盤中心(0,0)基準の等間隔グリッドを引く
@@ -2124,7 +2129,7 @@ function bindTutorialToggle() {
   try { panel.classList.toggle("minimized", localStorage.getItem("curlingTutorialMinimized") === "1"); } catch {}
   const refresh = () => {
     const minimized = panel.classList.contains("minimized");
-    button.textContent = minimized ? "？ 投げ方" : "− かくす";
+    button.textContent = "投げ方";
     button.setAttribute("aria-expanded", String(!minimized));
   };
   refresh();
