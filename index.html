@@ -328,7 +328,7 @@ const CONFIG = {
                           // 数十px戻ることがあり、10だと「引き直し」と誤認され押し出しが
                           // キャンセルされてしまっていた
   MIN_PUSH_DIST: 15,     // 押し出しがこの距離未満のままのリリースは投げない(=引いて放しただけでは飛ばない)
-  PUSH_MAX_POWER_RANGE: 15, // 新設:アンカーからこのpx分までは押し出し係数を1.0(全力)のまま維持する
+  PUSH_MAX_POWER_RANGE: 65, // この距離まで押せば最大。石の直近まで戻さなくても全力になる余裕を持たせる
                           // 「猶予」区間。最大パワーを出せる範囲が実質1点(pushDist=0)しかなく
                           // 操作しづらいとの指摘があったため、序盤に平坦なゾーンを設けて緩和した。
                           // 40→20→15(PROTO23):PUSH_SOFT_RANGE短縮とあわせ、可動域をさらにコンパクトに
@@ -383,7 +383,7 @@ const CONFIG = {
   FAN_MIN_ANGLE: 0.05,   // 回転が最小(CURVE_MIN)のときの扇の半開き角(rad、約3°)。ほぼ直線に近い狭さ
 
   /* --- 表示・演出 --- */
-  SHOW_TRAIL: true,      // 軌跡トレイル表示(カーブの目視確認用)
+  SHOW_TRAIL: false,     // 投球後のデバッグ軌跡は表示しない
   TIME_SCALE: 0.2625,    // シミュレーション再生速度。1.0=等速。0.525→0.2625:「下げる前の50%のスピード」
                           // という指示どおり、直前の値からさらに半分に。画面上の滑走だけを遅くする
                           // (物理の軌道・衝突・パワーは完全に不変)。カーリングらしく行方を見守る間を作る
@@ -823,13 +823,11 @@ function updateAim(px, py) {
   }
 }
 
-// 押し出し距離→パワー係数(短いほど強く、長いほどゆっくり)
+// 押し出し距離→パワー係数(前へ押すほど強くなる直感操作)
 function pushCoef(pushDist) {
-  // PUSH_MAX_POWER_RANGE分は全力(1.0)を維持する猶予ゾーン。それ以降はPUSH_SOFT_RANGEまで
-  // 直線的にPUSH_MIN_COEFまで下がる。最大パワーが出せる範囲を広げ、操作の余裕を作る
-  if (pushDist <= CONFIG.PUSH_MAX_POWER_RANGE) return 1;
-  const t = clamp((pushDist - CONFIG.PUSH_MAX_POWER_RANGE) / (CONFIG.PUSH_SOFT_RANGE - CONFIG.PUSH_MAX_POWER_RANGE), 0, 1);
-  return 1 - (1 - CONFIG.PUSH_MIN_COEF) * t;
+  const t = clamp(pushDist / CONFIG.PUSH_MAX_POWER_RANGE, 0, 1);
+  const eased = Math.pow(t, 0.72);
+  return CONFIG.PUSH_MIN_COEF + (1 - CONFIG.PUSH_MIN_COEF) * eased;
 }
 
 // 最弱速度と最大速度を両端として、操作パワーを実際の初速へ変換する。
@@ -905,7 +903,8 @@ function finalizeAim(aim, px, py) {
   // peakPush基準だと押し出し量は記録された最大値までしか戻せず、パワー調整が
   // 一方通行(弱める一方)になっていた。前後にスワイプするだけでパワーを
   // 自由に上げ下げしてから離せるよう、リリース時点の実際の押し出し位置を使う
-  const base = clamp(aim.peakDraw * CONFIG.DRAW_TO_SPEED_SCALE, 0, CONFIG.MAX_THROW_SPEED);
+  // 最初の引き量は照準専用。速度は投球時の押し量だけで決める。
+  const base = CONFIG.MAX_THROW_SPEED;
   const speed = throwSpeedFromPower(base, pushCoef(aim.pushDist));
 
   return { dirX: aim.aimDirX, dirY: aim.aimDirY, curve, speed };
@@ -955,9 +954,11 @@ function completeTurn() {
 function drawPredictedShotPath(aim, color) {
   const character = game.hand[game.selectedHandIndex];
   const mods = character?.mods ?? {};
-  const base = clamp(aim.peakDraw * CONFIG.DRAW_TO_SPEED_SCALE, 0, CONFIG.MAX_THROW_SPEED);
+  const base = CONFIG.MAX_THROW_SPEED;
   let speed = throwSpeedFromPower(base, pushCoef(aim.pushDist)) * (mods.speedMult ?? 1);
-  let curve = lateralCurveAt(aim, aim.fx, aim.fy);
+  let curve = Number.isFinite(aim.fx) && Number.isFinite(aim.fy)
+    ? lateralCurveAt(aim, aim.fx, aim.fy)
+    : CONFIG.CURVE_MIN;
   if (Math.abs(curve) < CONFIG.CURVE_MIN) curve = (curve < 0 ? -1 : 1) * CONFIG.CURVE_MIN;
   let vx = aim.aimDirX * speed;
   let vy = aim.aimDirY * speed;
@@ -1317,6 +1318,11 @@ function physicsStep() {
             tSpeed *= lowSpeedDamping;
             const targetRelationMult = T.role === "enemy" ? S.mods.enemyKnockMult : S.mods.allyKnockMult;
             tSpeed *= targetRelationMult;
+            if (game.phase === "enemyMoving" && S.role === "enemy" && T.role === "player") {
+              // ガードを押しのけやすくする一方、敵自身も大きく減速する。
+              tSpeed *= 1.55;
+              sSpeed *= 0.58;
+            }
             sSpeed *= S.mods.selfStopMult;
             tSpeed *= T.mods.knockResist;
 
@@ -1770,7 +1776,7 @@ function render() {
   ctx.font = `${Math.max(16, hR / 8)}px 'Apple Color Emoji','Segoe UI Emoji',sans-serif`;
   ctx.fillText("💖", 0, 1 + heartFloat);
   ctx.font = `700 ${Math.max(11, hR / 13)}px 'DotGothic16', sans-serif`;
-  ctx.fillText("💖を守れ！", 0, hR + 18);
+  ctx.fillText("敵を弾いて💖を守れ！", 0, hR + 18);
 
   // 格子ガイド(デバッグ表示用):狙い位置↔着地位置を数値で共有しやすくするための目安線。
   // 盤の円でクリップしてから、盤中心(0,0)基準の等間隔グリッドを引く
@@ -1824,16 +1830,8 @@ function render() {
 
   const guideAim = a ?? game.lockedAim;
   if (!a && game.lockedAim) {
-    const guideLen = h * 1.1;
-    ctx.beginPath();
-    ctx.moveTo(launchBase.x, launchBase.y);
-    ctx.lineTo(
-      launchBase.x + game.lockedAim.aimDirX * guideLen,
-      launchBase.y + game.lockedAim.aimDirY * guideLen
-    );
-    ctx.strokeStyle = "rgba(233,30,99,0.86)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    // 照準決定直後から、現在の最弱速度で実軌道ガイドを見せる。
+    drawPredictedShotPath(game.lockedAim, { r: 123, g: 63, b: 228 });
     ctx.fillStyle = "#e91e63";
     ctx.font = "700 13px 'DotGothic16', sans-serif";
     ctx.textAlign = "center";
@@ -1914,20 +1912,20 @@ function render() {
       r *= 1 - 0.7 * t;
       alpha = 1 - t;
     }
-    drawPiece(s.x, s.y, r, p.color ?? ROLE_COLOR[p.role], p.rot, alpha, p.mods.partType, p.icon);
+    drawPiece(s.x, s.y, r, p.color ?? ROLE_COLOR[p.role], p.rot, alpha, p.mods.partType, p.icon, p.role === "enemy");
   }
 
   ctx.restore(); // 衝突演出の変換を解除
 }
 
-function drawPiece(x, y, r, color, rot, alpha, partType = null, icon = null) {
+function drawPiece(x, y, r, color, rot, alpha, partType = null, icon = null, enemyStyle = false) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y);
 
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fillStyle = icon ? "rgba(255,255,255,0.78)" : color;
+  ctx.fillStyle = icon ? (enemyStyle ? "#17131c" : "rgba(255,255,255,0.78)") : color;
   ctx.fill();
 
   ctx.rotate(rot);
@@ -2129,7 +2127,7 @@ function bindTutorialToggle() {
   try { panel.classList.toggle("minimized", localStorage.getItem("curlingTutorialMinimized") === "1"); } catch {}
   const refresh = () => {
     const minimized = panel.classList.contains("minimized");
-    button.textContent = "投げ方";
+    button.textContent = minimized ? "投げ方" : "かくす";
     button.setAttribute("aria-expanded", String(!minimized));
   };
   refresh();
