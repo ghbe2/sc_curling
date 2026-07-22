@@ -168,6 +168,7 @@ const CONFIG = {
   ENEMY_SPAWN_RADIUS: 265, // 七つの大罪の初期配置半径
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
+  HIROIBEO_ATTRACTION: 0.72, // 敵の進行方向を、最寄りのヒロイベオへ寄せる強さ
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 100,       // 1生存ターンあたりの得点
   SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
@@ -388,7 +389,7 @@ const CHARACTERS = [
   { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e", trait: "やわらかい耳", mods: { partType: "softEars" } },
   { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88", trait: "硬い角", mods: { partType: "hardHorn" } },
   { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c", trait: "吹き飛ばす角", mods: { partType: "powerHorns" } },
-  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91", trait: "能力準備中", mods: {} },
+  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91", trait: "敵を引きつける", mods: { enemyAttractor: true } },
 ];
 
 function randomCharacter() {
@@ -467,6 +468,7 @@ function createPiece(x, y, role, character = null) {
       radiusScale: 1,
       trajectoryGuide: false,
       partType: null,
+      enemyAttractor: false,
       ...(character?.mods ?? {}),
     },
   };
@@ -805,12 +807,35 @@ function startEnemyAdvance() {
   const pressureEnemy = enemies.reduce((closest, enemy) =>
     Math.hypot(enemy.x, enemy.y) < Math.hypot(closest.x, closest.y) ? enemy : closest
   );
+  const attractors = game.pieces.filter(p =>
+    p.role === "player" && p.state === "onboard" && p.mods.enemyAttractor
+  );
   for (const enemy of enemies) {
     const distance = Math.hypot(enemy.x, enemy.y);
     if (distance < 0.001) continue;
     const speed = baseSpeed * (enemy === pressureEnemy ? CONFIG.ENEMY_PRESSURE_MULT : 1);
-    enemy.vx = -enemy.x / distance * speed;
-    enemy.vy = -enemy.y / distance * speed;
+    let dirX = -enemy.x / distance;
+    let dirY = -enemy.y / distance;
+    if (attractors.length > 0) {
+      const target = attractors.reduce((nearest, piece) =>
+        Math.hypot(piece.x - enemy.x, piece.y - enemy.y) < Math.hypot(nearest.x - enemy.x, nearest.y - enemy.y)
+          ? piece
+          : nearest
+      );
+      const targetDx = target.x - enemy.x;
+      const targetDy = target.y - enemy.y;
+      const targetDistance = Math.hypot(targetDx, targetDy);
+      if (targetDistance > 0.001) {
+        const pull = CONFIG.HIROIBEO_ATTRACTION;
+        dirX = dirX * (1 - pull) + targetDx / targetDistance * pull;
+        dirY = dirY * (1 - pull) + targetDy / targetDistance * pull;
+        const blendedLength = Math.hypot(dirX, dirY) || 1;
+        dirX /= blendedLength;
+        dirY /= blendedLength;
+      }
+    }
+    enemy.vx = dirX * speed;
+    enemy.vy = dirY * speed;
     enemy.curve = 0;
     enemy.curveTurned = 0;
   }
