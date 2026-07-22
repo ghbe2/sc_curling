@@ -1453,7 +1453,7 @@ function physicsStep() {
           }
 
           // 衝突演出:強さに応じた画面揺れ+瞬間ズーム
-          if (impact > 0.7) registerCollisionHit(a, b, impact);
+          // 音階式の衝突音と8音ボーナスは演出刷新まで停止する。
           if (impact > CONFIG.FX_MIN_IMPACT) {
             game.shakeMag = Math.min(CONFIG.SHAKE_MAX, game.shakeMag + impact * CONFIG.SHAKE_SCALE);
             game.zoomPulse = Math.min(CONFIG.ZOOM_MAX, game.zoomPulse + impact * CONFIG.ZOOM_SCALE);
