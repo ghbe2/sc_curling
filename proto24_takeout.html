@@ -1014,6 +1014,8 @@ function drawPredictedShotPath(aim, color) {
       if (step % 5 === 0) points.push(toScreen(x, y));
     }
     if (traveled < guideDistance) {
+      // 間引き描画の最終点ではなく、停止直前の正確な座標を入れてから接線延長する。
+      points.push(toScreen(x, y));
       const remaining = guideDistance - traveled;
       x += lastDirX * remaining; y += lastDirY * remaining;
     }
