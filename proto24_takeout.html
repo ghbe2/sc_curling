@@ -965,32 +965,67 @@ function completeTurn() {
 function drawPredictedShotPath(aim, color) {
   const character = game.hand[game.selectedHandIndex];
   const mods = character?.mods ?? {};
-  let curve = Number.isFinite(aim.fx) && Number.isFinite(aim.fy)
+  const rawCurve = Number.isFinite(aim.fx) && Number.isFinite(aim.fy)
     ? lateralCurveAt(aim, aim.fx, aim.fy)
-    : CONFIG.CURVE_MIN;
-  if (Math.abs(curve) < CONFIG.CURVE_MIN) curve = (curve < 0 ? -1 : 1) * CONFIG.CURVE_MIN;
+    : 0;
+  const curveMag = Math.max(CONFIG.CURVE_MIN, Math.abs(rawCurve));
+  const coef = pushCoef(aim.pushDist ?? 0);
+  const speedPower = clamp((coef - CONFIG.PUSH_MIN_COEF) / (1 - CONFIG.PUSH_MIN_COEF), 0, 1);
   const start = toScreen(launcherPos().x, launcherPos().y);
   const guideLen = Math.max(window.innerWidth, window.innerHeight) * 0.92;
   const perpX = -aim.aimDirY, perpY = aim.aimDirX;
-  const bend = clamp(bendFromSpin(curve) * (mods.pathCurveMult ?? 1), -1.5, 1.5) * guideLen * 0.28;
+  // 実物理と同じく、強回転ほど狭く、速いほど直進寄りにする。
+  const speedBendMult = 1.2 - speedPower * 0.72;
+  const characterBend = clamp(mods.pathCurveMult ?? 1, 0.2, 1.65);
+  const bend = Math.abs(bendFromSpin(curveMag)) * speedBendMult * characterBend * guideLen * 0.25;
+  const control = {
+    x: start.x + aim.aimDirX * guideLen * 0.54,
+    y: start.y + aim.aimDirY * guideLen * 0.54,
+  };
+  const makeBoundary = (side) => {
+    const end = {
+      x: start.x + aim.aimDirX * guideLen + perpX * bend * side,
+      y: start.y + aim.aimDirY * guideLen + perpY * bend * side,
+    };
+    const points = [];
+    for (let i = 0; i <= 44; i++) {
+      const t = i / 44, u = 1 - t;
+      points.push({
+        x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+        y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
+      });
+    }
+    return points;
+  };
+  const left = makeBoundary(-1);
+  const right = makeBoundary(1);
+
+  // 左右の間を速度色で薄く塗る。停止位置ではなく「曲がり得る向き」の範囲。
   ctx.beginPath();
-  ctx.moveTo(start.x, start.y);
-  ctx.quadraticCurveTo(
-    start.x + aim.aimDirX * guideLen * 0.56,
-    start.y + aim.aimDirY * guideLen * 0.56,
-    start.x + aim.aimDirX * guideLen + perpX * bend,
-    start.y + aim.aimDirY * guideLen + perpY * bend
-  );
-  ctx.lineCap = "round";
-  ctx.setLineDash([]);
-  // ピンク背景や最弱パワーでも消えないよう、白い縁取りの上に濃い紫を重ねる。
-  ctx.strokeStyle = "rgba(255,255,255,0.92)";
-  ctx.lineWidth = 7;
-  ctx.stroke();
-  ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.94)`;
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.moveTo(left[0].x, left[0].y);
+  for (const point of left) ctx.lineTo(point.x, point.y);
+  for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},0.11)`;
+  ctx.fill();
+
+  const neutral = Math.abs(rawCurve) < 0.12;
+  const leftAlpha = neutral ? 0.68 : rawCurve < 0 ? 0.98 : 0.25;
+  const rightAlpha = neutral ? 0.68 : rawCurve > 0 ? 0.98 : 0.25;
+  const strokeBoundary = (points, alpha) => {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.lineCap = "round";
+    ctx.strokeStyle = `rgba(255,255,255,${0.42 + alpha * 0.5})`;
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${alpha})`;
+    ctx.lineWidth = alpha > 0.8 ? 3.8 : 2.2;
+    ctx.stroke();
+  };
+  strokeBoundary(left, leftAlpha);
+  strokeBoundary(right, rightAlpha);
 }
 
 // 二段階操作: 1ジェスチャー目で照準を固定し、2ジェスチャー目の前スワイプで投げる。
