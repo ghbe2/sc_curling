@@ -1251,6 +1251,8 @@ let audioCtx = null;
 let audioMaster = null;
 let slideGain = null;
 let slideFilter = null;
+let slideShimmerGain = null;
+let slideShimmerOsc = null;
 let soundEnabled = true;
 let lastCollisionSoundAt = -1;
 
@@ -1272,12 +1274,28 @@ function ensureAudio() {
     slideSource.loop = true;
     slideFilter = audioCtx.createBiquadFilter();
     slideFilter.type = "bandpass";
-    slideFilter.frequency.value = 1450;
-    slideFilter.Q.value = 0.7;
+    slideFilter.frequency.value = 2200;
+    slideFilter.Q.value = 0.45;
     slideGain = audioCtx.createGain();
     slideGain.gain.value = 0;
     slideSource.connect(slideFilter).connect(slideGain).connect(audioMaster);
     slideSource.start();
+
+    // 「サー」の上に、ごく小さなデジタルのきらめきを重ねる。
+    slideShimmerOsc = audioCtx.createOscillator();
+    slideShimmerOsc.type = "triangle";
+    slideShimmerOsc.frequency.value = 740;
+    slideShimmerGain = audioCtx.createGain();
+    slideShimmerGain.gain.value = 0;
+    const shimmerLfo = audioCtx.createOscillator();
+    const shimmerDepth = audioCtx.createGain();
+    shimmerLfo.type = "sine";
+    shimmerLfo.frequency.value = 5.2;
+    shimmerDepth.gain.value = 12;
+    shimmerLfo.connect(shimmerDepth).connect(slideShimmerOsc.frequency);
+    slideShimmerOsc.connect(slideShimmerGain).connect(audioMaster);
+    slideShimmerOsc.start();
+    shimmerLfo.start();
   }
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
@@ -1302,20 +1320,31 @@ function playCollisionSound(impact) {
   if (now - lastCollisionSoundAt < 0.055) return;
   lastCollisionSoundAt = now;
   const strength = clamp(impact / 18, 0.18, 1);
+  const noteChoices = [659.25, 783.99, 987.77];
+  const baseNote = noteChoices[Math.min(noteChoices.length - 1, Math.floor(strength * noteChoices.length))];
   const hitGain = ac.createGain();
   hitGain.gain.setValueAtTime(0.0001, now);
-  hitGain.gain.exponentialRampToValueAtTime(0.22 * strength, now + 0.004);
-  hitGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.58);
+  hitGain.gain.exponentialRampToValueAtTime(0.17 * strength, now + 0.006);
+  hitGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
   hitGain.connect(audioMaster);
-  for (const [frequency, volume] of [[760, 1], [1130, 0.45], [1570, 0.2]]) {
+
+  // 小さな一回だけのエコーで、金属音をデジタルポップなチャイムへ寄せる。
+  const delay = ac.createDelay();
+  const delayGain = ac.createGain();
+  delay.delayTime.value = 0.075;
+  delayGain.gain.value = 0.18;
+  hitGain.connect(delay).connect(delayGain).connect(audioMaster);
+
+  for (const [ratio, volume, type] of [[1, 1, "sine"], [1.5, 0.34, "sine"], [2, 0.14, "triangle"]]) {
     const osc = ac.createOscillator();
     const partialGain = ac.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(frequency + Math.min(impact, 20) * 5, now);
+    osc.type = type;
+    osc.frequency.setValueAtTime(baseNote * ratio * 1.045, now);
+    osc.frequency.exponentialRampToValueAtTime(baseNote * ratio, now + 0.055);
     partialGain.gain.value = volume;
     osc.connect(partialGain).connect(hitGain);
     osc.start(now);
-    osc.stop(now + 0.62);
+    osc.stop(now + 0.46);
   }
 }
 
@@ -1324,9 +1353,12 @@ function updateSlideSound() {
   const movingSpeed = game.pieces.reduce((max, p) =>
     p.state === "onboard" ? Math.max(max, Math.hypot(p.vx, p.vy)) : max, 0
   );
-  const targetGain = clamp((movingSpeed - 0.08) / 30, 0, 1) * 0.06;
+  const motion = clamp((movingSpeed - 0.08) / 30, 0, 1);
+  const targetGain = motion * 0.042;
   slideGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
-  slideFilter.frequency.setTargetAtTime(1050 + Math.min(movingSpeed, 35) * 32, audioCtx.currentTime, 0.1);
+  slideFilter.frequency.setTargetAtTime(1750 + Math.min(movingSpeed, 35) * 38, audioCtx.currentTime, 0.1);
+  slideShimmerGain.gain.setTargetAtTime(motion * 0.011, audioCtx.currentTime, 0.12);
+  slideShimmerOsc.frequency.setTargetAtTime(680 + Math.min(movingSpeed, 35) * 8, audioCtx.currentTime, 0.12);
 }
 
 function bindSoundButton() {
@@ -1339,6 +1371,7 @@ function bindSoundButton() {
     button.setAttribute("aria-pressed", String(soundEnabled));
     if (soundEnabled) unlockAudio();
     if (slideGain && audioCtx) slideGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02);
+    if (slideShimmerGain && audioCtx) slideShimmerGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02);
   });
 }
 
