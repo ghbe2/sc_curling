@@ -26,7 +26,7 @@
     color: #2b1f24;
     font-family: 'DotGothic16', system-ui, sans-serif;
     font-size: 12px;
-    display: flex; align-items: center; gap: 10px;
+    display: none;
     pointer-events: none;
   }
   #hud .label { opacity: 0.6; font-size: 10px; margin-right: 2px; }
@@ -125,7 +125,7 @@
   #gameOverTitle { font-size: 25px; font-weight: 800; margin-bottom: 8px; }
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
   #sideInfo {
-    position: fixed; left: 8px; top: calc(75% - 105px); z-index: 2;
+    position: fixed; left: 8px; top: 8px; z-index: 2;
     transition: opacity 0.12s, transform 0.12s;
   }
   #sideInfo.hidden { opacity: 0; pointer-events: none; transform: translateX(-12px); }
@@ -168,16 +168,11 @@
 <div id="handBar" aria-label="キャラストーン手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
-    <span>生存<span class="scoreValue" id="survivalScoreText">0</span></span>
-    <span>テイク<span class="scoreValue" id="takeoutScoreText">0</span></span>
-    <span>盤面<span class="scoreValue" id="boardScoreText">0</span></span>
-    <span>全滅BONUS<span class="scoreValue" id="waveBonusText">0</span></span>
-    <span>おんぷBONUS<span class="scoreValue" id="noteBonusText">0</span></span>
-    <span id="scoreTotalRow">TOTAL<span class="scoreValue" id="totalScoreText">0</span></span>
+    <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
   <button class="btn" id="fastForwardBtn">長押し早送り ×9</button>
 </div>
-<div id="hint">引く(左右で狙い)→ 前に押し出す(短い=強い/長い=ゆっくり)→ 離す<br>狙いの中心線から横にズレた分だけ回転。左回転=左カーブ。引いたまま放しても投げない</div>
+<div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
 <div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><button class="btn" id="retryBtn">もう一度</button></div></div>
 
 <script>
@@ -387,6 +382,7 @@ const game = {
   pieces: [],
   launcherReady: true,
   aim: null,
+  lockedAim: null,
   chainCountThisThrow: 0,
   toastTimer: 0,
   shakeMag: 0,   // 画面揺れの現在量(px)
@@ -428,11 +424,11 @@ const CHARACTERS = [
   { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "直進軌道 0.25×", mods: { pathCurveMult: 0.25 } },
   { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "被弾に強い", mods: { knockResist: 0.45 } },
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "当たると止まる", mods: { selfStopMult: 0.35 } },
-  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "やわらかい耳", mods: { partType: "softEars" } },
-  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "硬い角", mods: { partType: "hardHorn" } },
+  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "味方に強・敵に弱", mods: { allyKnockMult: 1.65, enemyKnockMult: 0.55 } },
+  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "摩擦が少ない", mods: { frictionMult: 0.45 } },
   { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "曲線軌道 2.5×", mods: { pathCurveMult: 2.5 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "敵を引きつける", mods: { enemyAttractor: true } },
-  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "吹き飛ばす角", mods: { partType: "powerHorns" } },
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "味方に弱・敵に強", mods: { allyKnockMult: 0.55, enemyKnockMult: 1.65 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スタンダード", mods: {} },
   { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
   { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.2×", mods: { radiusScale: 1.2 } },
@@ -520,6 +516,9 @@ function createPiece(x, y, role, character = null) {
       trajectoryGuide: false,
       partType: null,
       enemyAttractor: false,
+      allyKnockMult: 1,
+      enemyKnockMult: 1,
+      frictionMult: 1,
       ...(character?.mods ?? {}),
     },
   };
@@ -580,6 +579,7 @@ function buildSurvivalGame() {
   spawnEnemyWave();
   game.launcherReady = true;
   game.aim = null;
+  game.lockedAim = null;
   game.turn = 1;
   game.shotInProgress = false;
   game.pendingHandIndex = null;
@@ -642,14 +642,16 @@ function spinTransferToOther(thetaRad) { return lerpTable(SPIN_ANGLE_DEG, SPIN_T
  *         (時間窓なし。詳細はCURVE_DIST_SCALEのコメント参照)。CURVE_MINで無回転を排除。
  * --------------------------------------------------- */
 function startAim(pointerId, px0, py0) {
+  const locked = game.lockedAim;
   game.aim = {
     pointerId,
     p0x: px0, p0y: py0,
     fx: px0, fy: py0,
-    state: "draw",
-    aimDirX: 0, aimDirY: -1,
+    mode: locked ? "launch" : "setAim",
+    state: locked ? "push" : "draw",
+    aimDirX: locked?.aimDirX ?? 0, aimDirY: locked?.aimDirY ?? -1,
     drawDist: 0,       // 現在の引き距離
-    peakDraw: 0,       // 最深の引き距離(基礎パワーの元)
+    peakDraw: locked?.peakDraw ?? 0,       // 最深の引き距離(基礎パワーの元)
     pushDist: 0,       // 押し出し距離(瞬間値。フリックの後方ぶれで一時的に縮むことがある)
     peakPush: 0,       // 押し出しの最大到達値(パワー計算・投擲判定はこちらを使う)
   };
@@ -835,6 +837,7 @@ function throwPiece(params) {
   p.vy = params.dirY * speed;
   p.curve = params.curve;
   game.pieces.push(p);
+  game.lockedAim = null;
   game.launcherReady = false;
   game.phase = "playerMoving";
   game.shotInProgress = true;
@@ -857,6 +860,42 @@ function completeTurn() {
   game.buttonDanger = Boolean(enemyAtCenter());
   game.turnAlertLevel = game.buttonDanger ? "pinch" : (enemyOnHouse() ? "house" : "none");
   renderHand();
+}
+
+// 二段階操作: 1ジェスチャー目で照準を固定し、2ジェスチャー目の前スワイプで投げる。
+function updateAimTwoStage(px, py) {
+  const a = game.aim;
+  if (!a) return;
+  a.fx = px;
+  a.fy = py;
+  const dx = px - a.p0x, dy = py - a.p0y;
+  const dist = Math.hypot(dx, dy);
+
+  if (a.mode === "setAim") {
+    if (dist > CONFIG.AIM_DEADZONE) {
+      [a.aimDirX, a.aimDirY] = clampAimDirection(-dx / dist, -dy / dist);
+      a.drawDist = dist;
+      a.peakDraw = Math.max(a.peakDraw, dist);
+    }
+    return;
+  }
+
+  const forward = dx * a.aimDirX + dy * a.aimDirY;
+  if (-forward > CONFIG.REDRAW_THRESH) {
+    // 固定後にもう一度引いたら、その場で照準の決め直しへ戻る。
+    game.lockedAim = null;
+    a.mode = "setAim";
+    a.state = "draw";
+    [a.aimDirX, a.aimDirY] = clampAimDirection(-dx / (dist || 1), -dy / (dist || 1));
+    a.drawDist = dist;
+    a.peakDraw = dist;
+    a.pushDist = 0;
+    a.peakPush = 0;
+    return;
+  }
+
+  a.pushDist = Math.max(0, forward);
+  a.peakPush = Math.max(a.peakPush, a.pushDist);
 }
 
 function enemyAtCenter() {
@@ -892,7 +931,7 @@ function startEnemyAdvance() {
     game.score.waveBonus += CONFIG.SCORE_WAVE_CLEAR;
     game.wave++;
     spawnEnemyWave();
-    showToast("ぶらんくっ！", `＋${CONFIG.SCORE_WAVE_CLEAR}てん`);
+    showToast("ぶらんくっ！");
     enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
   }
   const scarcityBoost = 1 + clamp((ENEMIES.length - enemies.length) / (ENEMIES.length - 1), 0, 1) * 0.8;
@@ -1029,7 +1068,8 @@ function physicsStep() {
       }
 
       // 摩擦:PROTO23で回転量による低減を廃止し、常にFRICTIONのみ(CONFIG冒頭コメント参照)
-      const fricEff = Math.pow(CONFIG.FRICTION, k);
+      const frictionMult = p.mods.frictionMult ?? 1;
+      const fricEff = Math.pow(CONFIG.FRICTION, k * frictionMult);
       p.vx *= fricEff;
       p.vy *= fricEff;
 
@@ -1037,7 +1077,8 @@ function physicsStep() {
       // 同じ減速量でも低速ほど速度に占める割合が大きくなり、止まり際が締まる。
       const speedAfterFriction = Math.hypot(p.vx, p.vy);
       if (speedAfterFriction > 0) {
-        const speedAfterResistance = Math.max(0, speedAfterFriction - CONFIG.ROLLING_RESISTANCE * k);
+        const rollingMult = p.role === "enemy" && game.phase === "enemyMoving" ? 0 : frictionMult;
+        const speedAfterResistance = Math.max(0, speedAfterFriction - CONFIG.ROLLING_RESISTANCE * k * rollingMult);
         const resistanceScale = speedAfterResistance / speedAfterFriction;
         p.vx *= resistanceScale;
         p.vy *= resistanceScale;
@@ -1078,7 +1119,8 @@ function physicsStep() {
         const nx = dx / dist, ny = dy / dist;
         const profileA = partContactProfile(a, nx, ny);
         const profileB = partContactProfile(b, -nx, -ny);
-        const minDist = profileA.radius + profileB.radius;
+        const enemyAdvancePair = game.phase === "enemyMoving" && a.role === "enemy" && b.role === "enemy";
+        const minDist = (profileA.radius + profileB.radius) * (enemyAdvancePair ? (2 / 3) : 1);
         if (dist >= minDist) continue;
 
         const overlap = minDist - dist;
@@ -1128,6 +1170,8 @@ function physicsStep() {
             const lowSpeedDamping = CONFIG.LOW_SPEED_COLLISION_MIN + (1 - CONFIG.LOW_SPEED_COLLISION_MIN) * lowSpeedT;
             sSpeed *= lowSpeedDamping;
             tSpeed *= lowSpeedDamping;
+            const targetRelationMult = T.role === "enemy" ? S.mods.enemyKnockMult : S.mods.allyKnockMult;
+            tSpeed *= targetRelationMult;
             sSpeed *= S.mods.selfStopMult;
             tSpeed *= T.mods.knockResist;
 
@@ -1254,7 +1298,7 @@ function physicsStep() {
 
 function showChainToast(n) {
   const names = { 2: "だぶるていくっ!!", 3: "とりぷるていくっ!!!", 4: "よんこどりっ!!!!" };
-  showToast(names[n] ?? `${n}こどりっ!!!!!`, `＋${n * CONFIG.SCORE_TAKEOUT}てん`);
+  showToast(names[n] ?? `${n}こどりっ!!!!!`);
 }
 
 function showToast(text, scoreText = "") {
@@ -1335,7 +1379,7 @@ function registerCollisionHit(a, b, impact) {
   if (game.noteHits >= NOTE_SCALE.length) {
     game.noteHits = 0;
     game.score.noteBonus += CONFIG.SCORE_NOTE_CYCLE;
-    showToast("どれみふぁそらしどっ！", `＋${CONFIG.SCORE_NOTE_CYCLE}てん`);
+    showToast("どれみふぁそらしどっ！");
   }
 }
 
@@ -1625,8 +1669,26 @@ function render() {
     drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1, selectedCharacter?.mods?.partType, selectedCharacter?.icon);
   }
 
-  if (a && selectedCharacter?.mods?.trajectoryGuide) {
-    drawTrajectoryGuide(a, launcherRadius / view.scale);
+  const guideAim = a ?? game.lockedAim;
+  if (!a && game.lockedAim) {
+    const guideLen = h * 1.1;
+    ctx.beginPath();
+    ctx.moveTo(launchBase.x, launchBase.y);
+    ctx.lineTo(
+      launchBase.x + game.lockedAim.aimDirX * guideLen,
+      launchBase.y + game.lockedAim.aimDirY * guideLen
+    );
+    ctx.strokeStyle = "rgba(233,30,99,0.86)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = "#e91e63";
+    ctx.font = "700 13px 'DotGothic16', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("ねらいOK → まえへおす", launchBase.x, launchBase.y + launcherRadius + 24);
+  }
+
+  if (guideAim && selectedCharacter?.mods?.trajectoryGuide) {
+    drawTrajectoryGuide(guideAim, launcherRadius / view.scale);
   }
 
   // 投球UI
@@ -1862,16 +1924,6 @@ function updateHUD() {
   const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.noteBonus + "|" + game.noteHits;
   if (s === lastHUD) return;
   lastHUD = s;
-  document.getElementById("countText").textContent = onboard;
-  document.getElementById("turnText").textContent = game.turn;
-  document.getElementById("waveText").textContent = game.wave;
-  document.getElementById("enemyCountText").textContent = enemies;
-  document.getElementById("phaseText").textContent = phaseNames[game.phase] ?? "";
-  document.getElementById("survivalScoreText").textContent = score.survivedTurns;
-  document.getElementById("takeoutScoreText").textContent = game.score.enemyTakeouts;
-  document.getElementById("boardScoreText").textContent = score.board;
-  document.getElementById("waveBonusText").textContent = score.waveBonus;
-  document.getElementById("noteBonusText").textContent = `${score.noteBonus} ♪${game.noteHits}/8`;
   document.getElementById("totalScoreText").textContent = score.total;
 }
 
@@ -1885,7 +1937,7 @@ window.addEventListener("pointerdown", (e) => {
 
 window.addEventListener("pointermove", (e) => {
   if (!game.aim || game.aim.pointerId !== e.pointerId) return;
-  updateAim(e.clientX, e.clientY);
+  updateAimTwoStage(e.clientX, e.clientY);
 }, { passive: false });
 
 window.addEventListener("pointerup", (e) => {
@@ -1893,6 +1945,21 @@ window.addEventListener("pointerup", (e) => {
   const aim = game.aim;
   game.aim = null;
   updateSideInfoVisibility();
+  if (aim.mode === "setAim") {
+    if (aim.peakDraw >= CONFIG.MIN_DRAW_DIST) {
+      game.lockedAim = {
+        mode: "locked",
+        state: "locked",
+        aimDirX: aim.aimDirX,
+        aimDirY: aim.aimDirY,
+        peakDraw: aim.peakDraw,
+        drawDist: aim.peakDraw,
+        pushDist: 0,
+        peakPush: 0,
+      };
+    }
+    return;
+  }
   const params = finalizeAim(aim, e.clientX, e.clientY);
   if (params) throwPiece(params);
 });
