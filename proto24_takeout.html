@@ -226,6 +226,8 @@ const CONFIG = {
                           // 境界(0度で完全停止/100%移行、90度で無反応)は指数によらず変わらない。
                           // 90度に近いほぼ真横のかすりは物理的に「ほぼ無反応」が正しいため、
                           // そこだけは指数を上げても撃った側の残存を大きくは減らせない
+  LOW_SPEED_COLLISION_REF: 9,
+  LOW_SPEED_COLLISION_MIN: 0.30,
   PIECE_RADIUS: 24,
   SETTLE_SPEED: 0.05,    // これ未満の速度になったら停止扱い(px/frame)
 
@@ -1101,6 +1103,11 @@ function physicsStep() {
 
             let sSpeed = relSpeed * sinTheta; // Sの新しい相対速度(接線方向)
             let tSpeed = relSpeed * cosTheta; // Tの新しい相対速度(入射方向)
+            // 止まりかけの石同士は、微小な接触で双方が再び大きく滑り出さないよう減衰する。
+            const lowSpeedT = clamp(impact / CONFIG.LOW_SPEED_COLLISION_REF, 0, 1);
+            const lowSpeedDamping = CONFIG.LOW_SPEED_COLLISION_MIN + (1 - CONFIG.LOW_SPEED_COLLISION_MIN) * lowSpeedT;
+            sSpeed *= lowSpeedDamping;
+            tSpeed *= lowSpeedDamping;
             sSpeed *= S.mods.selfStopMult;
             tSpeed *= T.mods.knockResist;
 
@@ -1251,8 +1258,6 @@ let audioCtx = null;
 let audioMaster = null;
 let slideGain = null;
 let slideFilter = null;
-let slideShimmerGain = null;
-let slideShimmerOsc = null;
 let soundEnabled = true;
 let lastCollisionSoundAt = -1;
 
@@ -1281,21 +1286,6 @@ function ensureAudio() {
     slideSource.connect(slideFilter).connect(slideGain).connect(audioMaster);
     slideSource.start();
 
-    // 「サー」の上に、ごく小さなデジタルのきらめきを重ねる。
-    slideShimmerOsc = audioCtx.createOscillator();
-    slideShimmerOsc.type = "triangle";
-    slideShimmerOsc.frequency.value = 740;
-    slideShimmerGain = audioCtx.createGain();
-    slideShimmerGain.gain.value = 0;
-    const shimmerLfo = audioCtx.createOscillator();
-    const shimmerDepth = audioCtx.createGain();
-    shimmerLfo.type = "sine";
-    shimmerLfo.frequency.value = 5.2;
-    shimmerDepth.gain.value = 12;
-    shimmerLfo.connect(shimmerDepth).connect(slideShimmerOsc.frequency);
-    slideShimmerOsc.connect(slideShimmerGain).connect(audioMaster);
-    slideShimmerOsc.start();
-    shimmerLfo.start();
   }
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
@@ -1356,9 +1346,8 @@ function updateSlideSound() {
   const motion = clamp((movingSpeed - 0.08) / 30, 0, 1);
   const targetGain = motion * 0.042;
   slideGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
-  slideFilter.frequency.setTargetAtTime(1750 + Math.min(movingSpeed, 35) * 38, audioCtx.currentTime, 0.1);
-  slideShimmerGain.gain.setTargetAtTime(motion * 0.011, audioCtx.currentTime, 0.12);
-  slideShimmerOsc.frequency.setTargetAtTime(680 + Math.min(movingSpeed, 35) * 8, audioCtx.currentTime, 0.12);
+  const digitalSweep = Math.sin(performance.now() * 0.008) * 140 * motion;
+  slideFilter.frequency.setTargetAtTime(1900 + Math.min(movingSpeed, 35) * 34 + digitalSweep, audioCtx.currentTime, 0.08);
 }
 
 function bindSoundButton() {
@@ -1371,7 +1360,6 @@ function bindSoundButton() {
     button.setAttribute("aria-pressed", String(soundEnabled));
     if (soundEnabled) unlockAudio();
     if (slideGain && audioCtx) slideGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02);
-    if (slideShimmerGain && audioCtx) slideShimmerGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02);
   });
 }
 
