@@ -172,6 +172,7 @@
     <span>テイク<span class="scoreValue" id="takeoutScoreText">0</span></span>
     <span>盤面<span class="scoreValue" id="boardScoreText">0</span></span>
     <span>全滅BONUS<span class="scoreValue" id="waveBonusText">0</span></span>
+    <span>おんぷBONUS<span class="scoreValue" id="noteBonusText">0</span></span>
     <span id="scoreTotalRow">TOTAL<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
   <button class="btn" id="fastForwardBtn">長押し早送り ×9</button>
@@ -194,21 +195,23 @@
 const CONFIG = {
   BOARD_RADIUS: 320,
   OUT_RADIUS: 520,       // 旧盤面の外では消さず、画面外へ大きく飛んだときだけ退場
-  HOUSE_RADIUS: 130,     // 新設(PROTO23、デバッグ表示用):カーリングの「ハウス」外周(青)の半径。
+  HOUSE_RADIUS: 195,     // 画面上で狙いやすいよう従来の1.5倍。各リング比率は維持。
                           // 実カーリングの比率(12/8/4/1フィート)に合わせて内側の白・赤・ボタンを
                           // HOUSE_RADIUS×2/3, ×1/3, ×1/12で描画する。物理には一切影響しない見た目のみの値
   GRID_SPACING: 40,      // 新設(PROTO23、デバッグ表示用):盤面に重ねる格子ガイドの間隔(px)。
                           // 「どこを狙うとどこに着地するか」を数値で共有しやすくするための目安線
-  ENEMY_SPAWN_RADIUS: 265, // 七つの大罪の初期配置半径
+  ENEMY_SPAWN_RADIUS: 290, // 拡大後もスマホ画面内に収まる外周配置
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
   HIROIBEO_ATTRACTION: 0.42, // 中心58%を残しつつ、最寄りのヒロイベオへ進路を曲げる
   SCORE_WAVE_CLEAR: 2000,
+  SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 100,       // 1生存ターンあたりの得点
   SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
   SCORE_BOARD_MAX: 100,  // 自石1個が中心にある場合の盤面支配点
-  FRICTION: 0.985,       // 1フレームごとの基本速度減衰率(回転なしの石)
+  FRICTION: 0.985,       // 高速域の基本速度減衰率
+  ROLLING_RESISTANCE: 0.03, // 毎フレーム一定量を引き、低速ほど相対的に強く減速させる
   /* --- 衝突の並進物理(PROTO23で入射角ベースのモデルへ全面置き換え) ---
    * 旧来のRESTITUTION(反発係数)方式は「正面衝突での配分」しか調整できず、
    * 下げるほど撃った側(ショットした石)の残り速度が逆に増えてしまう構造的な限界があった
@@ -228,7 +231,7 @@ const CONFIG = {
                           // そこだけは指数を上げても撃った側の残存を大きくは減らせない
   LOW_SPEED_COLLISION_REF: 9,
   LOW_SPEED_COLLISION_MIN: 0.30,
-  PIECE_RADIUS: 24,
+  PIECE_RADIUS: 36,
   SETTLE_SPEED: 0.05,    // これ未満の速度になったら停止扱い(px/frame)
 
   /* --- 回転(カーブ)物理:PROTO23で「回転量に比例してカーブする」方式へ変更 ---
@@ -404,7 +407,9 @@ const game = {
   score: {
     enemyTakeouts: 0,
     waveBonus: 0,
+    noteBonus: 0,
   },
+  noteHits: 0,
   wave: 1,
   enemySerial: 0,
 };
@@ -488,8 +493,11 @@ function minThrowSpeed() {
   return clamp(v, CONFIG.MIN_THROW_SPEED_FLOOR, CONFIG.MAX_THROW_SPEED);
 }
 
+let pieceUidSerial = 1;
+
 function createPiece(x, y, role, character = null) {
   return {
+    uid: pieceUidSerial++,
     x, y, vx: 0, vy: 0, rot: 0,
     role,
     state: "onboard",
@@ -584,6 +592,8 @@ function buildSurvivalGame() {
   game.turnAlertLevel = "none";
   game.score.enemyTakeouts = 0;
   game.score.waveBonus = 0;
+  game.score.noteBonus = 0;
+  game.noteHits = 0;
   document.getElementById("gameOver").classList.remove("show");
   createInitialHand();
   updateHUD();
@@ -1023,6 +1033,16 @@ function physicsStep() {
       p.vx *= fricEff;
       p.vy *= fricEff;
 
+      // カーリングの終盤らしく、一定の転がり抵抗を加える。
+      // 同じ減速量でも低速ほど速度に占める割合が大きくなり、止まり際が締まる。
+      const speedAfterFriction = Math.hypot(p.vx, p.vy);
+      if (speedAfterFriction > 0) {
+        const speedAfterResistance = Math.max(0, speedAfterFriction - CONFIG.ROLLING_RESISTANCE * k);
+        const resistanceScale = speedAfterResistance / speedAfterFriction;
+        p.vx *= resistanceScale;
+        p.vy *= resistanceScale;
+      }
+
       const ns = Math.hypot(p.vx, p.vy);
       if (ns < CONFIG.SETTLE_SPEED) { p.vx = 0; p.vy = 0; }
 
@@ -1157,7 +1177,7 @@ function physicsStep() {
           }
 
           // 衝突演出:強さに応じた画面揺れ+瞬間ズーム
-          if (impact > 0.7) playCollisionSound(impact);
+          if (impact > 0.7) registerCollisionHit(a, b, impact);
           if (impact > CONFIG.FX_MIN_IMPACT) {
             game.shakeMag = Math.min(CONFIG.SHAKE_MAX, game.shakeMag + impact * CONFIG.SHAKE_SCALE);
             game.zoomPulse = Math.min(CONFIG.ZOOM_MAX, game.zoomPulse + impact * CONFIG.ZOOM_SCALE);
@@ -1259,7 +1279,8 @@ let audioMaster = null;
 let slideGain = null;
 let slideFilter = null;
 let soundEnabled = true;
-let lastCollisionSoundAt = -1;
+const NOTE_SCALE = [523.25, 587.33, 659.25, 698.46, 783.99, 880, 987.77, 1046.5];
+const collisionPairTimes = new Map();
 
 function ensureAudio() {
   if (!soundEnabled) return null;
@@ -1303,15 +1324,26 @@ function unlockAudio() {
   silent.stop(ac.currentTime + 0.02);
 }
 
-function playCollisionSound(impact) {
+function registerCollisionHit(a, b, impact) {
+  const nowMs = performance.now();
+  const pairKey = a.uid < b.uid ? `${a.uid}:${b.uid}` : `${b.uid}:${a.uid}`;
+  if (nowMs - (collisionPairTimes.get(pairKey) ?? -Infinity) < 140) return;
+  collisionPairTimes.set(pairKey, nowMs);
+  const note = NOTE_SCALE[game.noteHits];
+  game.noteHits++;
+  playCollisionSound(impact, note);
+  if (game.noteHits >= NOTE_SCALE.length) {
+    game.noteHits = 0;
+    game.score.noteBonus += CONFIG.SCORE_NOTE_CYCLE;
+    showToast("どれみふぁそらしどっ！", `＋${CONFIG.SCORE_NOTE_CYCLE}てん`);
+  }
+}
+
+function playCollisionSound(impact, baseNote) {
   const ac = ensureAudio();
   if (!ac || !soundEnabled) return;
   const now = ac.currentTime;
-  if (now - lastCollisionSoundAt < 0.055) return;
-  lastCollisionSoundAt = now;
   const strength = clamp(impact / 18, 0.18, 1);
-  const noteChoices = [659.25, 783.99, 987.77];
-  const baseNote = noteChoices[Math.min(noteChoices.length - 1, Math.floor(strength * noteChoices.length))];
   const hitGain = ac.createGain();
   hitGain.gain.setValueAtTime(0.0001, now);
   hitGain.gain.exponentialRampToValueAtTime(0.17 * strength, now + 0.006);
@@ -1798,7 +1830,8 @@ function calculateScore() {
   const takeout = game.score.enemyTakeouts * CONFIG.SCORE_TAKEOUT;
   const board = calculateBoardControl();
   const waveBonus = game.score.waveBonus;
-  return { survivedTurns, survival, takeout, board, waveBonus, total: survival + takeout + board + waveBonus };
+  const noteBonus = game.score.noteBonus;
+  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, total: survival + takeout + board + waveBonus + noteBonus };
 }
 
 function updateDangerAlert() {
@@ -1826,7 +1859,7 @@ function updateHUD() {
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
   const score = calculateScore();
   updateDangerAlert();
-  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus;
+  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.noteBonus + "|" + game.noteHits;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("countText").textContent = onboard;
@@ -1838,6 +1871,7 @@ function updateHUD() {
   document.getElementById("takeoutScoreText").textContent = game.score.enemyTakeouts;
   document.getElementById("boardScoreText").textContent = score.board;
   document.getElementById("waveBonusText").textContent = score.waveBonus;
+  document.getElementById("noteBonusText").textContent = `${score.noteBonus} ♪${game.noteHits}/8`;
   document.getElementById("totalScoreText").textContent = score.total;
 }
 
