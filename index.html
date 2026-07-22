@@ -482,9 +482,14 @@ function partContactProfile(piece, dirX, dirY) {
   if (!type) return { radius: baseRadius, partHit: false, type: null };
   const axisAngle = piece.rot - Math.PI / 2;
   const alignment = Math.cos(axisAngle) * dirX + Math.sin(axisAngle) * dirY;
-  const limit = type === "softEars" ? Math.cos(0.72) : Math.cos(0.58);
+  const limit = type === "softEars"
+    ? Math.cos(0.9)
+    : (type === "hardHorn" ? Math.cos(0.75) : Math.cos(0.58));
   const partHit = alignment >= limit;
-  const extension = type === "softEars" ? 1.65 : (type === "powerHorns" ? 1.35 : 1.5);
+  // バーニの耳とリウの角は、石の縁から約1直径ぶん前へ伸びる。
+  const extension = type === "softEars" || type === "hardHorn"
+    ? 3
+    : 1.35;
   return { radius: baseRadius * (partHit ? extension : 1), partHit, type };
 }
 
@@ -1449,17 +1454,26 @@ function drawPiece(x, y, r, color, rot, alpha, partType = null) {
     ctx.strokeStyle = "rgba(255,255,255,0.5)";
     ctx.lineWidth = Math.max(1, r * 0.06);
     for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(side * r * 0.38, -r * 1.85);
+      ctx.rotate(side * 0.12);
       ctx.beginPath();
-      ctx.ellipse(side * r * 0.28, -r * 1.12, r * 0.18, r * 0.55, side * 0.12, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, r * 0.24, r * 1.12, 0, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
+      ctx.restore();
     }
   } else if (partType === "hardHorn") {
-    ctx.fillStyle = "#fff1c4";
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.23, -r * 0.72);
-    ctx.lineTo(0, -r * 1.5);
-    ctx.lineTo(r * 0.23, -r * 0.72);
-    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#b99572";
+    ctx.strokeStyle = "#6f5545";
+    ctx.lineWidth = Math.max(1, r * 0.06);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * r * 0.08, -r * 0.66);
+      ctx.bezierCurveTo(side * r * 0.55, -r * 1.05, side * r * 1.18, -r * 1.95, side * r * 0.83, -r * 3);
+      ctx.bezierCurveTo(side * r * 0.52, -r * 2.62, side * r * 0.68, -r * 1.52, side * r * 0.3, -r * 0.72);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
   } else if (partType === "powerHorns") {
     ctx.fillStyle = "#ffe09a";
     for (const side of [-1, 1]) {
