@@ -41,13 +41,13 @@
   #resetBtn { background: #4a3838; border-color: #6a4c4c; }
   #resetBtn:active { background: #5c4646; }
   #handBar {
-    position: fixed; right: 6px; top: 75%;
-    transform: translateY(-50%);
+    position: fixed; right: 6px; top: calc(75% - 105px);
+    transform: none;
     display: grid; grid-template-columns: 74px; gap: 6px;
     z-index: 3;
     transition: opacity 0.18s, transform 0.18s;
   }
-  #handBar.hidden { opacity: 0; pointer-events: none; transform: translate(18px, -50%); }
+  #handBar.hidden { opacity: 0; pointer-events: none; transform: translateX(18px); }
   .handCard {
     min-height: 48px; padding: 5px 3px;
     border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
@@ -56,6 +56,7 @@
     touch-action: manipulation;
   }
   .handCard .icon { display: block; font-size: 17px; margin-bottom: 2px; }
+  .handCard .trait { display: block; font-size: 8px; opacity: 0.62; margin-top: 2px; }
   .handCard.selected {
     border-color: #ffd67a; background: rgba(92,72,42,0.95);
     box-shadow: 0 0 0 2px rgba(255,214,122,0.25);
@@ -96,7 +97,7 @@
   #gameOverTitle { font-size: 25px; font-weight: 800; margin-bottom: 8px; }
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
   #scorePanel {
-    position: fixed; left: 8px; top: 52%; z-index: 2;
+    position: fixed; left: 8px; top: calc(75% - 105px); z-index: 2;
     display: grid; grid-template-columns: repeat(2, auto); gap: 3px 12px;
     padding: 7px 9px; border-radius: 8px;
     color: rgba(238,235,228,0.82); background: rgba(28,28,34,0.72);
@@ -186,14 +187,8 @@ const CONFIG = {
    *  ・回頭 = CURVE_STRENGTH × curve × 速度効き(直進化の抑制項は廃止、curveに単純比例)
    *  ・摩擦は回転量によらず一定(FRICTIONのみ。PROTO23でSPIN_GLIDEを廃止、下記参照)
    * --- */
-  CURVE_STRENGTH: 0.011, // 回頭の基準値(rad/frame、速度0付近での上限)。0.01625→0.011(PROTO23)。
-                          // 最弱パワーをさらに弱くしたところ、初速が下がった弱い投球+回転が
-                          // 低速で曲がりすぎ、盤に入る前に横へ逸れて消えてしまう問題が出た
-                          //(ランチャーが盤の遠く外にあるため、遅い石は助走中に曲がりきってしまう)。
-                          // カーブを弱めることで、最弱パワー+最大回転でもきちんと盤に入り、
-                          // かつ横ズレが約131px(ハウス半径130相当)に収まる=以前いただいた
-                          // 「最低パワー・最大回転は円の半径ほど曲がる」仕様にも一致するようになった。
-                          // 高速のテイクアウトは元々ほとんど曲がらないため距離・挙動は不変
+  CURVE_STRENGTH: 0.014, // PROTO24:全体的にカーブを感じやすくするため0.011→0.014(+約27%)。
+                          // 入力感度もCURVE_DIST_SCALEで上げ、回転量と実際の回頭の双方を強化
   CURVE_VREF: 8,         // 回頭の速度依存の基準(px/frame)。効き = (VREF/(VREF+速度))^CURVE_SLOW_POWER
   CURVE_SLOW_POWER: 2.4, // 速度効きの非線形さ。新設:「減速してくる後半ほどきつく曲がる」を強調するため、
                           // 速度依存の効きを単純な反比例(指数1)から2.4乗に変更。速いうちはより強く
@@ -208,7 +203,7 @@ const CONFIG = {
   // 曲がり方向の到達点が決まるようになり、手描きイメージの関係性と一致した
   CURVE_MAX_ANGLE: 1.4,  // 1投あたりの最大累積回頭角(rad)。完全旋回の構造的な防止弁
   CURVE_MIN: 0.337,      // PROTO24:見た目上の無回転ショットの停止時横移動を約1マス(40px)増加。
-                          // 390×844基準の最弱直進で約21px→約61pxになるよう数値校正
+                          // その後の全体強化でも、最小回転量の入力基準としてこの値は維持
 
   /* --- ストーンの見た目の自転(スピン表示):PROTO23で「実時間あたりの回転速度」方式に変更 ---
    * 旧実装は「中パワーでリングに届くまでの基準フレーム数」に対して何回転させるかを
@@ -283,9 +278,7 @@ const CONFIG = {
                           // 盤にすら届かなくなる事故を防ぐ安全弁
   MAX_THROW_SPEED: 60,   // PROTO24:最大パワーを46→60へ引き上げ、テイクショットの衝突速度を確保。
                           // 最弱はminThrowSpeed()を別端点にするため、この変更では飛距離が変わらない
-  CURVE_DIST_SCALE: 75,  // 狙いの中心線からの横ズレ(px)→curve値への変換係数。curve=横ズレ/この値をクランプ。
-                          // 60→75:カーブを決めるスワイプの感度を少し落として、狙いを定める際の
-                          // 誤操作(意図せず強い回転が乗ってしまう)を減らす
+  CURVE_DIST_SCALE: 60,  // PROTO24:同じ横操作で回転が乗りやすいよう75→60。curve=横ズレ/この値をクランプ。
                           // PROTO23で時間窓(旧FLICK_WINDOW_MS)を廃止し、時間に関係なく「いま指が
                           // 中心線からどれだけ離れているか」の位置だけを見る方式に変更した。
                           // 理由:リリース直前120msだけを見る方式だと、早めに横へ大きくズレても
@@ -369,18 +362,18 @@ const ENEMIES = [
 ];
 
 const CHARACTERS = [
-  { id: "mayuu", name: "マユゥ", icon: "🐭", color: "#e8d7bd" },
-  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8" },
-  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f" },
-  { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da" },
-  { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb" },
-  { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9" },
-  { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982" },
-  { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf" },
-  { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e" },
-  { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88" },
-  { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c" },
-  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91" },
+  { id: "mayuu", name: "マユゥ", icon: "🐭", color: "#e8d7bd", trait: "スタンダード", mods: {} },
+  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8", trait: "曲がりにくい", mods: { curveMult: 0.6 } },
+  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f", trait: "大きく曲がる", mods: { curveMult: 1.7 } },
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da", trait: "ゆっくり", mods: { speedMult: 0.8 } },
+  { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb", trait: "スピード", mods: { speedMult: 1.2 } },
+  { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9", trait: "能力準備中", mods: {} },
+  { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982", trait: "能力準備中", mods: {} },
+  { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf", trait: "能力準備中", mods: {} },
+  { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e", trait: "能力準備中", mods: {} },
+  { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88", trait: "能力準備中", mods: {} },
+  { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c", trait: "能力準備中", mods: {} },
+  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91", trait: "能力準備中", mods: {} },
 ];
 
 function randomCharacter() {
@@ -404,8 +397,11 @@ function renderHand() {
     button.type = "button";
     button.className = "handCard" + (index === game.selectedHandIndex ? " selected" : "");
     button.dataset.index = String(index);
+    button.dataset.characterId = character.id;
+    button.dataset.speedMult = String(character.mods.speedMult ?? 1);
+    button.dataset.curveMult = String(character.mods.curveMult ?? 1);
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
-    button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}`;
+    button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>`;
     button.style.borderBottomColor = character.color;
     button.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
@@ -450,6 +446,7 @@ function createPiece(x, y, role, character = null) {
       knockResist: 1,
       selfStopMult: 1,
       restitution: 0,
+      ...(character?.mods ?? {}),
     },
   };
 }
@@ -707,8 +704,9 @@ function throwPiece(params) {
   if (!character) return;
   const launch = launcherPos();
   const p = createPiece(launch.x, launch.y, "player", character);
-  p.vx = params.dirX * params.speed;
-  p.vy = params.dirY * params.speed;
+  const speed = params.speed * p.mods.speedMult;
+  p.vx = params.dirX * speed;
+  p.vy = params.dirY * speed;
   p.curve = params.curve;
   game.pieces.push(p);
   game.launcherReady = false;
@@ -835,7 +833,7 @@ function physicsStep() {
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
       const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
       if (p.curve && Math.abs(p.curveTurned) < CONFIG.CURVE_MAX_ANGLE) {
-        const dTheta = CONFIG.CURVE_STRENGTH * p.curve * slow * k;
+        const dTheta = CONFIG.CURVE_STRENGTH * p.curve * slow * k * p.mods.curveMult;
         const c = Math.cos(dTheta), sn = Math.sin(dTheta);
         const nvx = p.vx * c - p.vy * sn;
         const nvy = p.vx * sn + p.vy * c;
@@ -1199,7 +1197,8 @@ function render() {
       // 扇が広がる=「回転が強いほど大きく曲がる」の比例関係を視覚化する
       const coef = pushCoef(a.pushDist); // 実際の投擲パワー判定と同じ基準(pushDist=現在値)で表示を揃える
       const color = powerColor(coef);
-      const curveMag = estimateLiveCurveMag(a);
+      const selectedCharacter = game.hand[game.selectedHandIndex];
+      const curveMag = clamp(estimateLiveCurveMag(a) * (selectedCharacter?.mods?.curveMult ?? 1), 0, 1);
       const half = fanHalfAngle(curveMag);
       const ang = Math.atan2(a.aimDirY, a.aimDirX);
 
