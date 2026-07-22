@@ -993,7 +993,9 @@ function physicsStep() {
             }
             const Told_x = T.vx, Told_y = T.vy;
             S.vx = Told_x + tx * sSpeed; S.vy = Told_y + ty * sSpeed;
-            T.vx = Told_x + dirIx * tSpeed; T.vy = Told_y + dirIy * tSpeed;
+            // テイクされた石は、接触点から石の中心へ向かう法線上に進む。
+            // 回転による曲がりは、この初速を与えた後の通常のカーブ処理で加える。
+            T.vx = Told_x + nSTx * tSpeed; T.vy = Told_y + nSTy * tSpeed;
 
             // 瑞珠: 通常はゼロの反発成分を接触法線方向へ追加する。
             // S/Tのどちらが瑞珠でも「ぼよよん」が起きるが、既存の入射角配分はそのまま残す。
@@ -1200,9 +1202,14 @@ function drawTrajectoryGuide(aim, shooterRadius) {
   const launch = toScreen(launcherPos().x, launcherPos().y);
   const contact = toScreen(hit.contactX, hit.contactY);
   const target = toScreen(hit.target.x, hit.target.y);
+  const normalX = hit.target.x - hit.contactX;
+  const normalY = hit.target.y - hit.contactY;
+  const normalLength = Math.hypot(normalX, normalY) || 1;
+  const targetDirX = normalX / normalLength;
+  const targetDirY = normalY / normalLength;
   const guideLength = 170 * view.scale;
-  const endX = target.x + aim.aimDirX * guideLength;
-  const endY = target.y + aim.aimDirY * guideLength;
+  const endX = target.x + targetDirX * guideLength;
+  const endY = target.y + targetDirY * guideLength;
 
   ctx.save();
   ctx.setLineDash([7, 5]);
@@ -1220,7 +1227,7 @@ function drawTrajectoryGuide(aim, shooterRadius) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  const arrowAngle = Math.atan2(aim.aimDirY, aim.aimDirX);
+  const arrowAngle = Math.atan2(targetDirY, targetDirX);
   ctx.fillStyle = "rgba(255,218,104,0.95)";
   ctx.beginPath();
   ctx.moveTo(endX, endY);
