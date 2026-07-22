@@ -1071,6 +1071,21 @@ function drawPredictedShotPath(aim, color) {
   strokeBoundary(right, rightAlpha);
 }
 
+// カーブ・速度・停止位置を予測しない、照準方向だけの直線ガイド。
+function drawAimDirectionLine(aim) {
+  const start = toScreen(launcherPos().x, launcherPos().y);
+  const length = Math.max(window.innerWidth, window.innerHeight) * 1.05;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(start.x + aim.aimDirX * length, start.y + aim.aimDirY * length);
+  ctx.strokeStyle = "rgba(255,255,255,0.82)";
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(233,30,99,0.62)";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+}
+
 // 二段階操作: 1ジェスチャー目で照準を固定し、2ジェスチャー目の前スワイプで投げる。
 function updateAimTwoStage(px, py) {
   const a = game.aim;
@@ -1894,39 +1909,20 @@ function render() {
     drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1, selectedCharacter?.mods?.partType, selectedCharacter?.icon);
   }
 
-  const guideAim = a ?? game.lockedAim;
   if (!a && game.lockedAim) {
-    // 照準決定直後から、現在の最弱速度で実軌道ガイドを見せる。
-    drawPredictedShotPath(game.lockedAim, powerColor(pushCoef(0)));
+    drawAimDirectionLine(game.lockedAim);
     ctx.fillStyle = "#e91e63";
     ctx.font = "700 13px 'DotGothic16', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("ねらいOK → まえへおす", launchBase.x, launchBase.y + launcherRadius + 24);
   }
 
-  if (guideAim && selectedCharacter?.mods?.trajectoryGuide) {
-    drawTrajectoryGuide(guideAim, launcherRadius / view.scale);
-  }
+  // 軌道予測は一時停止中。ユゥナリナも現在は共通の直線ガイドのみ。
 
   // 投球UI
   if (a) {
     const pushing = a.state === "push";
-    const guideLen = h * 1.1;
-
-    if (pushing) {
-      // 押し出し中:回転方向へ曲がる一本の軌道線で予測を示す。
-      const coef = pushCoef(a.pushDist); // 実際の投擲パワー判定と同じ基準(pushDist=現在値)で表示を揃える
-      const color = powerColor(coef);
-      drawPredictedShotPath(a, color);
-    } else {
-      // 引き中:狙いに追従する単純な白線(従来どおり)
-      ctx.beginPath();
-      ctx.moveTo(launchBase.x, launchBase.y);
-      ctx.lineTo(launchBase.x + a.aimDirX * guideLen, launchBase.y + a.aimDirY * guideLen);
-      ctx.strokeStyle = "rgba(74,33,51,0.72)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+    drawAimDirectionLine(a);
 
     // アンカーとデッドゾーン
     ctx.beginPath();
