@@ -46,7 +46,7 @@
   #resetBtn { background: rgba(255,255,255,0.96); border-color: #f48fb1; }
   #resetBtn:active { background: #5c4646; }
   #handBar {
-    position: fixed; right: 6px; top: calc(75% - 105px);
+    position: fixed; right: 6px; top: 32%;
     transform: none;
     display: grid; grid-template-columns: 74px; gap: 6px;
     z-index: 3;
@@ -103,13 +103,7 @@
   #dangerAlert .dangerSub { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0; }
   @keyframes pinchPulse { from { transform: translateX(-50%) scale(0.96); } to { transform: translateX(-50%) scale(1.05); } }
   #hint {
-    position: fixed; bottom: 8px; left: 6px; right: 86px;
-    text-align: center;
-    color: rgba(43,31,36,0.55);
-    font-family: system-ui, sans-serif;
-    font-size: 11px;
-    pointer-events: none;
-    line-height: 1.6;
+    display: none;
   }
   #gameOver {
     position: fixed; inset: 0; z-index: 5;
@@ -141,12 +135,33 @@
   #scorePanel .scoreValue { color: #e91e63; font-weight: 700; margin-left: 4px; }
   #scoreTotalRow { grid-column: 1 / -1; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.1); }
   #fastForwardBtn {
-    width: 100%; margin-top: 5px; padding: 7px 8px;
+    position: fixed; right: 6px; top: calc(32% + 230px); z-index: 3;
+    width: 74px; padding: 8px 4px;
     color: #e91e63; background: rgba(255,255,255,0.96);
     border-color: #f48fb1;
     touch-action: none;
   }
   #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
+  #fastForwardBtn.hidden { opacity: 0; pointer-events: none; }
+  #throwTutorial {
+    position: fixed; left: 7px; top: 64px; z-index: 2;
+    width: 94px; padding: 9px 8px; box-sizing: border-box;
+    border: 2px solid #f48fb1; border-radius: 12px;
+    background: rgba(255,255,255,0.92); color: #4a2133;
+    font: 10px/1.35 'DotGothic16', system-ui, sans-serif;
+    pointer-events: none; transition: opacity 0.15s;
+  }
+  #throwTutorial.hidden { opacity: 0; }
+  .tutorialStep { margin-bottom: 9px; opacity: 0.46; }
+  .tutorialStep.active { opacity: 1; color: #e91e63; }
+  .tutorialTitle { display: block; margin-bottom: 3px; font-size: 11px; }
+  .tutorialGesture { font-size: 19px; line-height: 1; text-align: center; margin: 4px 0; }
+  .tutorialMeter { height: 7px; overflow: hidden; border-radius: 9px; background: #f4dce5; }
+  .tutorialFill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg,#81d4fa,#ff4081); transition: width 0.05s; }
+  #spinReadout { text-align: center; margin-top: 3px; min-height: 14px; }
+  @media (max-width: 390px) {
+    #throwTutorial { width: 82px; padding: 7px 6px; font-size: 9px; }
+  }
 </style>
 </head>
 <body>
@@ -170,7 +185,12 @@
   <div id="scorePanel">
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
-  <button class="btn" id="fastForwardBtn">長押し早送り ×9</button>
+</div>
+<button class="btn" id="fastForwardBtn">▶▶<br>はやおくり</button>
+<div id="throwTutorial">
+  <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">① ねらう</b><div class="tutorialGesture">↙ ↓ ↘</div>引いて、はなす</div>
+  <div class="tutorialStep" id="tutorialPower"><b class="tutorialTitle">② パワー</b><div class="tutorialGesture">☝</div>前へおす<div class="tutorialMeter"><div class="tutorialFill" id="powerFill"></div></div><div id="powerReadout">―</div></div>
+  <div class="tutorialStep" id="tutorialSpin"><b class="tutorialTitle">＋ かいてん</b><div class="tutorialGesture">← ☝ →</div>横にずらす<div class="tutorialMeter"><div class="tutorialFill" id="spinFill"></div></div><div id="spinReadout">まっすぐ</div></div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
 <div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><button class="btn" id="retryBtn">もう一度</button></div></div>
@@ -406,6 +426,7 @@ const game = {
     noteBonus: 0,
   },
   noteHits: 0,
+  noteBonusAwardedThisThrow: false,
   wave: 1,
   enemySerial: 0,
 };
@@ -594,6 +615,7 @@ function buildSurvivalGame() {
   game.score.waveBonus = 0;
   game.score.noteBonus = 0;
   game.noteHits = 0;
+  game.noteBonusAwardedThisThrow = false;
   document.getElementById("gameOver").classList.remove("show");
   createInitialHand();
   updateHUD();
@@ -660,6 +682,31 @@ function startAim(pointerId, px0, py0) {
 
 function updateSideInfoVisibility() {
   document.getElementById("sideInfo")?.classList.toggle("hidden", game.aim !== null);
+  document.getElementById("fastForwardBtn")?.classList.toggle("hidden", game.aim !== null || game.phase === "aim");
+}
+
+function updateThrowTutorial() {
+  const panel = document.getElementById("throwTutorial");
+  if (!panel) return;
+  panel.classList.toggle("hidden", game.phase !== "aim" || game.gameOver);
+  document.getElementById("fastForwardBtn")?.classList.toggle("hidden", game.phase === "aim" || game.gameOver || game.aim !== null);
+  const a = game.aim;
+  const aiming = a?.mode === "setAim" || (!a && !game.lockedAim);
+  const launching = a?.mode === "launch" || Boolean(!a && game.lockedAim);
+  document.getElementById("tutorialAim")?.classList.toggle("active", aiming);
+  document.getElementById("tutorialPower")?.classList.toggle("active", launching);
+  document.getElementById("tutorialSpin")?.classList.toggle("active", a?.mode === "launch");
+  const coef = a?.mode === "launch" ? pushCoef(a.pushDist) : CONFIG.PUSH_MIN_COEF;
+  const power = clamp((coef - CONFIG.PUSH_MIN_COEF) / (1 - CONFIG.PUSH_MIN_COEF), 0, 1);
+  const curve = a?.mode === "launch" ? lateralCurveAt(a, a.fx, a.fy) : 0;
+  const powerFill = document.getElementById("powerFill");
+  const spinFill = document.getElementById("spinFill");
+  if (powerFill) powerFill.style.width = `${Math.round(power * 100)}%`;
+  if (spinFill) spinFill.style.width = `${Math.round(Math.abs(curve) * 100)}%`;
+  const powerText = document.getElementById("powerReadout");
+  if (powerText) powerText.textContent = !launching ? "照準をきめてね" : power > 0.72 ? "つよい！" : power > 0.35 ? "ふつう" : "よわい";
+  const spinText = document.getElementById("spinReadout");
+  if (spinText) spinText.textContent = Math.abs(curve) < 0.12 ? "まっすぐ" : curve < 0 ? `ひだり ${Math.round(Math.abs(curve) * 100)}%` : `みぎ ${Math.round(Math.abs(curve) * 100)}%`;
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
@@ -843,6 +890,8 @@ function throwPiece(params) {
   game.shotInProgress = true;
   game.pendingHandIndex = handIndex;
   game.chainCountThisThrow = 0;
+  game.noteHits = 0;
+  game.noteBonusAwardedThisThrow = false;
   game.fastForward = 1; // 新しい投球の滑走は通常速度から始める(早送りは止まりかけで自動的にかかる)
   renderHand();
 }
@@ -1373,13 +1422,12 @@ function registerCollisionHit(a, b, impact) {
   const pairKey = a.uid < b.uid ? `${a.uid}:${b.uid}` : `${b.uid}:${a.uid}`;
   if (nowMs - (collisionPairTimes.get(pairKey) ?? -Infinity) < 140) return;
   collisionPairTimes.set(pairKey, nowMs);
-  const note = NOTE_SCALE[game.noteHits];
+  const note = NOTE_SCALE[game.noteHits % NOTE_SCALE.length];
   game.noteHits++;
   playCollisionSound(impact, note);
-  if (game.noteHits >= NOTE_SCALE.length) {
-    game.noteHits = 0;
+  if (game.noteHits >= NOTE_SCALE.length && !game.noteBonusAwardedThisThrow) {
+    game.noteBonusAwardedThisThrow = true;
     game.score.noteBonus += CONFIG.SCORE_NOTE_CYCLE;
-    showToast("どれみふぁそらしどっ！");
   }
 }
 
@@ -1467,6 +1515,7 @@ function frame(now) {
   if (game.zoomPulse < 0.001) game.zoomPulse = 0;
   updateSlideSound();
   render();
+  updateThrowTutorial();
   requestAnimationFrame(frame);
 }
 
