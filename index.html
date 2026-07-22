@@ -79,6 +79,7 @@
     transition: opacity 0.15s, transform 0.15s;
   }
   #chainToast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #chainToast .toastScore { margin-top: 6px; font-size: 14px; color: #4a2133; }
   #hint {
     position: fixed; bottom: 8px; left: 6px; right: 86px;
     text-align: center;
@@ -168,6 +169,7 @@
  * ========================================================================= */
 const CONFIG = {
   BOARD_RADIUS: 320,
+  OUT_RADIUS: 520,       // 旧盤面の外では消さず、画面外へ大きく飛んだときだけ退場
   HOUSE_RADIUS: 130,     // 新設(PROTO23、デバッグ表示用):カーリングの「ハウス」外周(青)の半径。
                           // 実カーリングの比率(12/8/4/1フィート)に合わせて内側の白・赤・ボタンを
                           // HOUSE_RADIUS×2/3, ×1/3, ×1/12で描画する。物理には一切影響しない見た目のみの値
@@ -377,7 +379,6 @@ const game = {
   },
   wave: 1,
   enemySerial: 0,
-  ringReinforcements: new Set(),
 };
 
 const ENEMIES = [
@@ -520,6 +521,7 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
   p.enemyId = enemy.id;
   p.enemyName = `${enemy.name}（${enemy.sin}）`;
   p.enemyIcon = enemy.icon;
+  p.houseRingsReached = new Set();
   p.color = enemy.color;
   game.pieces.push(p);
   game.enemySerial++;
@@ -527,7 +529,6 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
 }
 
 function spawnEnemyWave() {
-  game.ringReinforcements = new Set();
   for (let i = 0; i < ENEMIES.length; i++) {
     const angle = -Math.PI / 2 + (Math.PI * 2 * i) / ENEMIES.length;
     spawnEnemy(i, angle);
@@ -836,10 +837,11 @@ function startEnemyAdvance() {
     game.score.waveBonus += CONFIG.SCORE_WAVE_CLEAR;
     game.wave++;
     spawnEnemyWave();
-    showToast(`WAVE ${game.wave - 1} CLEAR! +${CONFIG.SCORE_WAVE_CLEAR}`);
+    showToast("BLANK!", `+${CONFIG.SCORE_WAVE_CLEAR}`);
     enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
   }
-  const baseSpeed = CONFIG.ENEMY_ADVANCE_DISTANCE / CONFIG.STOP_DIST_PER_SPEED;
+  const scarcityBoost = 1 + clamp((ENEMIES.length - enemies.length) / (ENEMIES.length - 1), 0, 1) * 0.8;
+  const baseSpeed = CONFIG.ENEMY_ADVANCE_DISTANCE * scarcityBoost / CONFIG.STOP_DIST_PER_SPEED;
   const pressureEnemy = enemies.reduce((closest, enemy) =>
     Math.hypot(enemy.x, enemy.y) < Math.hypot(closest.x, closest.y) ? enemy : closest
   );
@@ -897,17 +899,19 @@ function handleAllPiecesSettled() {
         CONFIG.HOUSE_RADIUS * (2 / 3),
         CONFIG.HOUSE_RADIUS * (1 / 3),
       ];
-      for (let i = 0; i < ringThresholds.length; i++) {
-        if (game.ringReinforcements.has(i)) continue;
-        const reached = game.pieces.some(p =>
-          p.role === "enemy" && p.state === "onboard" && Math.hypot(p.x, p.y) <= ringThresholds[i]
-        );
-        if (reached) {
-          game.ringReinforcements.add(i);
-          spawnEnemy();
-          showToast("ハウス侵入！ 敵が増援");
+      const currentEnemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
+      let reinforcementCount = 0;
+      for (const enemy of currentEnemies) {
+        if (!enemy.houseRingsReached) enemy.houseRingsReached = new Set();
+        const distance = Math.hypot(enemy.x, enemy.y);
+        for (let i = 0; i < ringThresholds.length; i++) {
+          if (distance <= ringThresholds[i] && !enemy.houseRingsReached.has(i)) {
+            enemy.houseRingsReached.add(i);
+            reinforcementCount++;
+          }
         }
       }
+      for (let i = 0; i < reinforcementCount; i++) spawnEnemy();
       completeTurn();
     }
   }
@@ -1115,7 +1119,7 @@ function physicsStep() {
     for (const p of game.pieces) {
       if (p.state !== "onboard") continue;
       const r = Math.hypot(p.x, p.y);
-      const limit = CONFIG.BOARD_RADIUS - pieceRadius(p) * 0.3;
+      const limit = CONFIG.OUT_RADIUS - pieceRadius(p) * 0.3;
 
       if (!p.entered) {
         if (r < limit) {
@@ -1178,12 +1182,22 @@ function physicsStep() {
 }
 
 function showChainToast(n) {
-  showToast(n + "個 同時テイクアウト!");
+  const names = { 2: "DOUBLE TAKE!!", 3: "TRIPLE TAKE!!!", 4: "QUAD TAKE!!!!" };
+  showToast(names[n] ?? `${n} STONE TAKE!!!!!`, `+${n * CONFIG.SCORE_TAKEOUT}`);
 }
 
-function showToast(text) {
+function showToast(text, scoreText = "") {
   const el = document.getElementById("chainToast");
-  el.textContent = text;
+  el.replaceChildren();
+  const title = document.createElement("div");
+  title.textContent = text;
+  el.appendChild(title);
+  if (scoreText) {
+    const score = document.createElement("div");
+    score.className = "toastScore";
+    score.textContent = scoreText;
+    el.appendChild(score);
+  }
   el.classList.add("show");
   game.toastTimer = 1.4;
 }
@@ -1297,13 +1311,13 @@ function drawTrajectoryGuide(aim, shooterRadius) {
   ctx.save();
   ctx.setLineDash([7, 5]);
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(118,235,255,0.72)";
+  ctx.strokeStyle = "rgba(74,33,51,0.82)";
   ctx.beginPath();
   ctx.moveTo(launch.x, launch.y);
   ctx.lineTo(contact.x, contact.y);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(255,218,104,0.9)";
+  ctx.strokeStyle = "rgba(0,105,110,0.9)";
   ctx.beginPath();
   ctx.moveTo(target.x, target.y);
   ctx.lineTo(endX, endY);
@@ -1311,7 +1325,7 @@ function drawTrajectoryGuide(aim, shooterRadius) {
   ctx.setLineDash([]);
 
   const arrowAngle = Math.atan2(targetDirY, targetDirX);
-  ctx.fillStyle = "rgba(255,218,104,0.95)";
+  ctx.fillStyle = "rgba(0,105,110,0.95)";
   ctx.beginPath();
   ctx.moveTo(endX, endY);
   ctx.lineTo(endX - Math.cos(arrowAngle - 0.45) * 10, endY - Math.sin(arrowAngle - 0.45) * 10);
@@ -1345,20 +1359,20 @@ function render() {
   ctx.translate(view.cx, view.cy);
   ctx.beginPath();
   ctx.arc(0, 0, R * 1.02, 0, Math.PI * 2);
-  ctx.fillStyle = "#3a3a44";
+  ctx.fillStyle = "rgba(0,0,0,0)";
   ctx.fill();
   ctx.beginPath();
   ctx.arc(0, 0, R * 0.97, 0, Math.PI * 2);
-  ctx.fillStyle = "#26262e";
+  ctx.fillStyle = "rgba(0,0,0,0)";
   ctx.fill();
 
   // ハウス(カーリングの的、デバッグ表示用):外周(青)→白→赤→ボタン(白)
   const hR = CONFIG.HOUSE_RADIUS * view.scale;
   const houseRings = [
-    { r: hR, color: "#3a6bc9" },        // 12フィート相当(外周・青)
-    { r: hR * (2 / 3), color: "#d8d8d8" }, // 8フィート相当(白)
-    { r: hR * (1 / 3), color: "#c0392b" }, // 4フィート相当(赤)
-    { r: hR * (1 / 12), color: "#d8d8d8" }, // ボタン(白)
+    { r: hR, color: "#8f78b5" },        // 12フィート相当(ラベンダー)
+    { r: hR * (2 / 3), color: "#fff8fb" }, // 8フィート相当(白)
+    { r: hR * (1 / 3), color: "#f48fb1" }, // 4フィート相当(ピンク)
+    { r: hR * (1 / 12), color: "#e91e63" }, // ボタン(濃いピンク)
   ];
   for (const ring of houseRings) {
     ctx.beginPath();
@@ -1374,7 +1388,7 @@ function render() {
   ctx.arc(0, 0, R * 0.97, 0, Math.PI * 2);
   ctx.clip();
   const gs = CONFIG.GRID_SPACING * view.scale;
-  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.strokeStyle = "rgba(0,0,0,0)";
   ctx.lineWidth = 1;
   for (let x = 0; x <= R * 1.05; x += gs) {
     ctx.beginPath(); ctx.moveTo(x, -R * 1.05); ctx.lineTo(x, R * 1.05); ctx.stroke();
@@ -1385,7 +1399,7 @@ function render() {
     if (y > 0) { ctx.beginPath(); ctx.moveTo(-R * 1.05, -y); ctx.lineTo(R * 1.05, -y); ctx.stroke(); }
   }
   // 中心を通る太めの十字線(原点の目印)
-  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.strokeStyle = "rgba(0,0,0,0)";
   ctx.beginPath(); ctx.moveTo(0, -R * 1.05); ctx.lineTo(0, R * 1.05); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(-R * 1.05, 0); ctx.lineTo(R * 1.05, 0); ctx.stroke();
   ctx.restore();
@@ -1410,7 +1424,7 @@ function render() {
   const selectedCharacter = game.hand[game.selectedHandIndex];
   const launcherRadius = CONFIG.PIECE_RADIUS * (selectedCharacter?.mods?.radiusScale ?? 1) * view.scale;
   ctx.arc(launchBase.x, launchBase.y, launcherRadius * 1.15, 0, Math.PI * 2);
-  ctx.strokeStyle = game.launcherReady ? "rgba(111,168,255,0.7)" : "rgba(255,255,255,0.15)";
+  ctx.strokeStyle = game.launcherReady ? "rgba(74,33,51,0.82)" : "rgba(74,33,51,0.2)";
   ctx.lineWidth = 2;
   ctx.stroke();
   if (game.launcherReady) {
@@ -1466,7 +1480,7 @@ function render() {
       ctx.beginPath();
       ctx.moveTo(launchBase.x, launchBase.y);
       ctx.lineTo(launchBase.x + a.aimDirX * guideLen, launchBase.y + a.aimDirY * guideLen);
-      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.strokeStyle = "rgba(74,33,51,0.72)";
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -1474,7 +1488,7 @@ function render() {
     // アンカーとデッドゾーン
     ctx.beginPath();
     ctx.arc(a.p0x, a.p0y, CONFIG.AIM_DEADZONE, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.strokeStyle = "rgba(74,33,51,0.3)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -1482,14 +1496,14 @@ function render() {
     ctx.beginPath();
     ctx.moveTo(a.p0x, a.p0y);
     ctx.lineTo(a.fx, a.fy);
-    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.strokeStyle = "rgba(74,33,51,0.52)";
     ctx.lineWidth = 2;
     ctx.stroke();
 
     // 指位置マーカー
     ctx.beginPath();
     ctx.arc(a.fx, a.fy, 10, 0, Math.PI * 2);
-    ctx.fillStyle = pushing ? "rgba(255,196,90,0.5)" : "rgba(111,168,255,0.5)";
+    ctx.fillStyle = pushing ? "rgba(233,30,99,0.68)" : "rgba(74,33,51,0.58)";
     ctx.fill();
   }
 
@@ -1504,7 +1518,7 @@ function render() {
           const s = toScreen(q.x, q.y);
           ctx.lineTo(s.x, s.y);
         }
-        ctx.strokeStyle = "rgba(111,168,255,0.3)";
+      ctx.strokeStyle = "rgba(74,33,51,0.35)";
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -1602,7 +1616,7 @@ function calculateBoardControl() {
   const value = game.pieces
     .filter(p => p.role === "player" && p.state === "onboard" && p.entered)
     .reduce((sum, p) => {
-      const proximity = clamp(1 - Math.hypot(p.x, p.y) / CONFIG.BOARD_RADIUS, 0, 1);
+      const proximity = clamp(1 - Math.hypot(p.x, p.y) / CONFIG.HOUSE_RADIUS, 0, 1);
       return sum + proximity * CONFIG.SCORE_BOARD_MAX;
     }, 0);
   return Math.round(value);
