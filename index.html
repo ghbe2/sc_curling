@@ -162,6 +162,7 @@
 <div id="chainToast"></div>
 <div id="dangerAlert" aria-live="polite"></div>
 <div id="scenarioBar">
+  <button class="btn" id="soundBtn" aria-pressed="true">🔊</button>
   <button class="btn" id="resetBtn">RE</button>
 </div>
 <div id="handBar" aria-label="キャラストーン手札"></div>
@@ -201,7 +202,7 @@ const CONFIG = {
   ENEMY_SPAWN_RADIUS: 265, // 七つの大罪の初期配置半径
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
-  HIROIBEO_ATTRACTION: 0.72, // 敵の進行方向を、最寄りのヒロイベオへ寄せる強さ
+  HIROIBEO_ATTRACTION: 0.42, // 中心58%を残しつつ、最寄りのヒロイベオへ進路を曲げる
   SCORE_WAVE_CLEAR: 2000,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 100,       // 1生存ターンあたりの得点
@@ -1146,6 +1147,7 @@ function physicsStep() {
           }
 
           // 衝突演出:強さに応じた画面揺れ+瞬間ズーム
+          if (impact > 0.7) playCollisionSound(impact);
           if (impact > CONFIG.FX_MIN_IMPACT) {
             game.shakeMag = Math.min(CONFIG.SHAKE_MAX, game.shakeMag + impact * CONFIG.SHAKE_SCALE);
             game.zoomPulse = Math.min(CONFIG.ZOOM_MAX, game.zoomPulse + impact * CONFIG.ZOOM_SCALE);
@@ -1241,6 +1243,90 @@ function showToast(text, scoreText = "") {
   game.toastTimer = 1.8;
 }
 
+/* ---------- SE ---------- */
+let audioCtx = null;
+let audioMaster = null;
+let slideGain = null;
+let slideFilter = null;
+let soundEnabled = true;
+let lastCollisionSoundAt = -1;
+
+function ensureAudio() {
+  if (!soundEnabled) return null;
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    audioCtx = new AudioContextClass();
+    audioMaster = audioCtx.createGain();
+    audioMaster.gain.value = 0.72;
+    audioMaster.connect(audioCtx.destination);
+
+    const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const slideSource = audioCtx.createBufferSource();
+    slideSource.buffer = noiseBuffer;
+    slideSource.loop = true;
+    slideFilter = audioCtx.createBiquadFilter();
+    slideFilter.type = "bandpass";
+    slideFilter.frequency.value = 1450;
+    slideFilter.Q.value = 0.7;
+    slideGain = audioCtx.createGain();
+    slideGain.gain.value = 0;
+    slideSource.connect(slideFilter).connect(slideGain).connect(audioMaster);
+    slideSource.start();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+function playCollisionSound(impact) {
+  const ac = ensureAudio();
+  if (!ac || !soundEnabled) return;
+  const now = ac.currentTime;
+  if (now - lastCollisionSoundAt < 0.055) return;
+  lastCollisionSoundAt = now;
+  const strength = clamp(impact / 18, 0.18, 1);
+  const hitGain = ac.createGain();
+  hitGain.gain.setValueAtTime(0.0001, now);
+  hitGain.gain.exponentialRampToValueAtTime(0.12 * strength, now + 0.004);
+  hitGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.58);
+  hitGain.connect(audioMaster);
+  for (const [frequency, volume] of [[760, 1], [1130, 0.45], [1570, 0.2]]) {
+    const osc = ac.createOscillator();
+    const partialGain = ac.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(frequency + Math.min(impact, 20) * 5, now);
+    partialGain.gain.value = volume;
+    osc.connect(partialGain).connect(hitGain);
+    osc.start(now);
+    osc.stop(now + 0.62);
+  }
+}
+
+function updateSlideSound() {
+  if (!audioCtx || !slideGain || !soundEnabled) return;
+  const movingSpeed = game.pieces.reduce((max, p) =>
+    p.state === "onboard" ? Math.max(max, Math.hypot(p.vx, p.vy)) : max, 0
+  );
+  const targetGain = clamp((movingSpeed - 0.08) / 30, 0, 1) * 0.035;
+  slideGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
+  slideFilter.frequency.setTargetAtTime(1050 + Math.min(movingSpeed, 35) * 32, audioCtx.currentTime, 0.1);
+}
+
+function bindSoundButton() {
+  const button = document.getElementById("soundBtn");
+  button.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    soundEnabled = !soundEnabled;
+    button.textContent = soundEnabled ? "🔊" : "🔇";
+    button.setAttribute("aria-pressed", String(soundEnabled));
+    if (soundEnabled) ensureAudio();
+    if (slideGain && audioCtx) slideGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02);
+  });
+}
+
 /* ---------- メインループ ---------- */
 const STEP = 1 / 60;
 let accumulator = 0;
@@ -1267,6 +1353,7 @@ function frame(now) {
   if (game.shakeMag < 0.1) game.shakeMag = 0;
   game.zoomPulse *= CONFIG.ZOOM_DECAY;
   if (game.zoomPulse < 0.001) game.zoomPulse = 0;
+  updateSlideSound();
   render();
   requestAnimationFrame(frame);
 }
@@ -1780,7 +1867,9 @@ function bindFastForwardButton() {
 onResize();
 bindResetButtons();
 bindFastForwardButton();
+bindSoundButton();
 buildSurvivalGame();
+window.addEventListener("pointerdown", ensureAudio, { passive: true });
 requestAnimationFrame(frame);
 </script>
 </body>
