@@ -363,13 +363,13 @@ const ENEMIES = [
 
 const CHARACTERS = [
   { id: "mayuu", name: "マユゥ", icon: "🐭", color: "#e8d7bd", trait: "スタンダード", mods: {} },
-  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8", trait: "超直進 0.25×", mods: { curveMult: 0.25 } },
-  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f", trait: "超カーブ 2.5×", mods: { curveMult: 2.5 } },
+  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8", trait: "直進軌道 0.25×", mods: { pathCurveMult: 0.25 } },
+  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f", trait: "曲線軌道 2.5×", mods: { pathCurveMult: 2.5 } },
   { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
   { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb", trait: "大型 1.2×", mods: { radiusScale: 1.2 } },
-  { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9", trait: "能力準備中", mods: {} },
-  { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982", trait: "能力準備中", mods: {} },
-  { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf", trait: "能力準備中", mods: {} },
+  { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9", trait: "被弾に強い", mods: { knockResist: 0.45 } },
+  { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982", trait: "当たると止まる", mods: { selfStopMult: 0.35 } },
+  { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
   { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e", trait: "能力準備中", mods: {} },
   { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88", trait: "能力準備中", mods: {} },
   { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c", trait: "能力準備中", mods: {} },
@@ -399,7 +399,7 @@ function renderHand() {
     button.dataset.index = String(index);
     button.dataset.characterId = character.id;
     button.dataset.speedMult = String(character.mods.speedMult ?? 1);
-    button.dataset.curveMult = String(character.mods.curveMult ?? 1);
+    button.dataset.pathCurveMult = String(character.mods.pathCurveMult ?? 1);
     button.dataset.radiusScale = String(character.mods.radiusScale ?? 1);
     button.dataset.trajectoryGuide = String(character.mods.trajectoryGuide ?? false);
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
@@ -444,7 +444,7 @@ function createPiece(x, y, role, character = null) {
     color: character?.color ?? null,
     mods: {
       speedMult: 1,
-      curveMult: 1,
+      pathCurveMult: 1,
       knockResist: 1,
       selfStopMult: 1,
       restitution: 0,
@@ -841,7 +841,7 @@ function physicsStep() {
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
       const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
       if (p.curve && Math.abs(p.curveTurned) < CONFIG.CURVE_MAX_ANGLE) {
-        const dTheta = CONFIG.CURVE_STRENGTH * p.curve * slow * k * p.mods.curveMult;
+        const dTheta = CONFIG.CURVE_STRENGTH * p.curve * slow * k * p.mods.pathCurveMult;
         const c = Math.cos(dTheta), sn = Math.sin(dTheta);
         const nvx = p.vx * c - p.vy * sn;
         const nvy = p.vx * sn + p.vy * c;
@@ -927,11 +927,22 @@ function physicsStep() {
             const tLen = Math.hypot(tx, ty);
             if (tLen > 1e-6) { tx /= tLen; ty /= tLen; } else { tx = 0; ty = 0; }
 
-            const sSpeed = relSpeed * sinTheta; // Sの新しい相対速度(接線方向)
-            const tSpeed = relSpeed * cosTheta; // Tの新しい相対速度(入射方向)
+            let sSpeed = relSpeed * sinTheta; // Sの新しい相対速度(接線方向)
+            let tSpeed = relSpeed * cosTheta; // Tの新しい相対速度(入射方向)
+            sSpeed *= S.mods.selfStopMult;
+            tSpeed *= T.mods.knockResist;
             const Told_x = T.vx, Told_y = T.vy;
             S.vx = Told_x + tx * sSpeed; S.vy = Told_y + ty * sSpeed;
             T.vx = Told_x + dirIx * tSpeed; T.vy = Told_y + dirIy * tSpeed;
+
+            // 瑞珠: 通常はゼロの反発成分を接触法線方向へ追加する。
+            // S/Tのどちらが瑞珠でも「ぼよよん」が起きるが、既存の入射角配分はそのまま残す。
+            const restitution = Math.max(S.mods.restitution, T.mods.restitution);
+            if (restitution > 0) {
+              const bounceSpeed = impact * restitution;
+              S.vx -= nSTx * bounceSpeed; S.vy -= nSTy * bounceSpeed;
+              T.vx += nSTx * bounceSpeed; T.vy += nSTy * bounceSpeed;
+            }
 
             // 回転の逆伝達(PROTO23):ユーザー提供の「入射角 vs 回転エネルギー」チャートの数値を
             // そのまま校正点に採用。以前は入射角に関係なく常にSPIN_HIT_DECAY/SPIN_TRANSFER固定
@@ -1273,7 +1284,7 @@ function render() {
       const coef = pushCoef(a.pushDist); // 実際の投擲パワー判定と同じ基準(pushDist=現在値)で表示を揃える
       const color = powerColor(coef);
       const selectedCharacter = game.hand[game.selectedHandIndex];
-      const curveMag = clamp(estimateLiveCurveMag(a) * (selectedCharacter?.mods?.curveMult ?? 1), 0, 1);
+      const curveMag = estimateLiveCurveMag(a);
       const half = fanHalfAngle(curveMag);
       const ang = Math.atan2(a.aimDirY, a.aimDirX);
 
