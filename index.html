@@ -135,6 +135,7 @@ const CONFIG = {
                           // 「どこを狙うとどこに着地するか」を数値で共有しやすくするための目安線
   ENEMY_SPAWN_RADIUS: 265, // 七つの大罪の初期配置半径
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
+  ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   FRICTION: 0.985,       // 1フレームごとの基本速度減衰率(回転なしの石)
   /* --- 衝突の並進物理(PROTO23で入射角ベースのモデルへ全面置き換え) ---
@@ -729,10 +730,14 @@ function startEnemyAdvance() {
     completeTurn();
     return;
   }
-  const speed = CONFIG.ENEMY_ADVANCE_DISTANCE / CONFIG.STOP_DIST_PER_SPEED;
+  const baseSpeed = CONFIG.ENEMY_ADVANCE_DISTANCE / CONFIG.STOP_DIST_PER_SPEED;
+  const pressureEnemy = enemies.reduce((closest, enemy) =>
+    Math.hypot(enemy.x, enemy.y) < Math.hypot(closest.x, closest.y) ? enemy : closest
+  );
   for (const enemy of enemies) {
     const distance = Math.hypot(enemy.x, enemy.y);
     if (distance < 0.001) continue;
+    const speed = baseSpeed * (enemy === pressureEnemy ? CONFIG.ENEMY_PRESSURE_MULT : 1);
     enemy.vx = -enemy.x / distance * speed;
     enemy.vy = -enemy.y / distance * speed;
     enemy.curve = 0;
