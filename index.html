@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>テイクアウト手触り検証 PROTO23</title>
+<title>テイクアウト手触り検証 PROTO24</title>
 <style>
   html, body {
     margin: 0; padding: 0;
@@ -40,6 +40,25 @@
   .btn:active { background: #46465a; }
   #resetBtn { background: #4a3838; border-color: #6a4c4c; }
   #resetBtn:active { background: #5c4646; }
+  #handBar {
+    position: fixed; left: 50%; bottom: 6px;
+    transform: translateX(-50%);
+    display: grid; grid-template-columns: repeat(4, minmax(64px, 82px)); gap: 6px;
+    z-index: 3;
+  }
+  .handCard {
+    min-height: 48px; padding: 5px 4px;
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
+    color: #f7f3ea; background: rgba(38,38,48,0.9);
+    font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.2;
+    touch-action: manipulation;
+  }
+  .handCard .icon { display: block; font-size: 17px; margin-bottom: 2px; }
+  .handCard.selected {
+    border-color: #ffd67a; background: rgba(92,72,42,0.95);
+    box-shadow: 0 0 0 2px rgba(255,214,122,0.25);
+  }
+  .handCard.locked { opacity: 0.45; }
   #chainToast {
     position: fixed; left: 50%; top: 26%;
     transform: translate(-50%, -50%) scale(0.8);
@@ -54,7 +73,7 @@
   }
   #chainToast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   #hint {
-    position: fixed; bottom: 1.5%; left: 0; right: 0;
+    position: fixed; bottom: 62px; left: 0; right: 0;
     text-align: center;
     color: rgba(232, 228, 220, 0.4);
     font-family: system-ui, sans-serif;
@@ -67,7 +86,8 @@
 <body>
 <canvas id="board"></canvas>
 <div id="hud">
-  <span><span class="label">PROTO23</span>テイクアウト検証</span>
+  <span><span class="label">PROTO24</span>サバイバル開発</span>
+  <span><span class="label">TURN</span><span id="turnText">1</span></span>
   <span><span class="label">盤上</span><span id="countText">0</span></span>
   <span id="scenarioNameText"></span>
 </div>
@@ -79,6 +99,7 @@
   <button class="btn" id="sc4">④</button>
   <button class="btn" id="resetBtn">RE</button>
 </div>
+<div id="handBar" aria-label="キャラストーン手札"></div>
 <div id="hint">引く(左右で狙い)→ 前に押し出す(短い=強い/長い=ゆっくり)→ 離す<br>狙いの中心線から横にズレた分だけ回転。左回転=左カーブ。引いたまま放しても投げない</div>
 
 <script>
@@ -202,7 +223,9 @@ const CONFIG = {
                           // MIN_THROW_SPEEDの下限保護が働かないまま盤の奥まで届いてしまっていた。
                           // 0.08まで下げると引きの深さによらず最大押し出し時はMIN_THROW_SPEED付近まで
                           // 落ち、「最弱に投げたらサークルに届かない」を引きの強さに関係なく保証できる
-  DRAW_TO_SPEED_SCALE: 0.5, // 引き距離(px)→基礎初速(px/frame)。0.25→0.5:ランチャーが画面最下部にあるため
+  POWER_CURVE_EXPONENT: 1.35, // PROTO24:最弱から最大へ近づくほど速度の伸びが大きくなる急加速カーブ。
+                          // 1.0なら線形、1より大きいほど弱〜中を保ちながらテイク側を強くする
+  DRAW_TO_SPEED_SCALE: 0.75, // PROTO24:最大初速60に合わせ、実機の60〜80px程度の引きで上限へ届くよう調整
                           // 下に引けるスペースが実機では60〜80px程度しかなく、0.25では基礎パワーが
                           // 上限の半分にも届かなかった。60〜80pxの引きで上限に達するよう再調整
   // 最低速度は固定値ではなく、ランチャーから盤中心までの距離(D)に応じて動的に計算する
@@ -223,9 +246,8 @@ const CONFIG = {
                           // この値を基準に端末ごとのDから最低速度を逆算する(minThrowSpeed())
   MIN_THROW_SPEED_FLOOR: 6, // 動的計算した最低速度のさらに下限(px/frame)。極端に小さいDの端末で
                           // 盤にすら届かなくなる事故を防ぐ安全弁
-  MAX_THROW_SPEED: 46,   // 基礎初速の上限(px/frame)。40→46:「最大パワーの石をもう少し速く」との
-                          // 指示で+15%。摩擦で盤中央到達時に約半分まで減速するため、
-                          // 中央での衝突速度25前後=重い一撃が出るよう引き上げ(80px引き切りで到達)
+  MAX_THROW_SPEED: 60,   // PROTO24:最大パワーを46→60へ引き上げ、テイクショットの衝突速度を確保。
+                          // 最弱はminThrowSpeed()を別端点にするため、この変更では飛距離が変わらない
   CURVE_DIST_SCALE: 75,  // 狙いの中心線からの横ズレ(px)→curve値への変換係数。curve=横ズレ/この値をクランプ。
                           // 60→75:カーブを決めるスワイプの感度を少し落として、狙いを定める際の
                           // 誤操作(意図せず強い回転が乗ってしまう)を減らす
@@ -291,7 +313,61 @@ const game = {
   fastForward: 1, // 新設(PROTO23):現在の早送り倍率(なめらかに補間される)。1=通常。
                   // 「盤上の最速の石」がFF_SLOW_SPEED未満になったらFF_MAX_MULTへ寄り、速い石が
                   // あれば1へ戻る。physicsStep()内で毎フレーム更新する
+  turn: 1,
+  hand: [],
+  selectedHandIndex: 0,
+  pendingHandIndex: null,
+  shotInProgress: false,
 };
+
+const CHARACTERS = [
+  { id: "mayuu", name: "マユゥ", icon: "🐭", color: "#e8d7bd" },
+  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8" },
+  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f" },
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da" },
+  { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb" },
+  { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9" },
+  { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982" },
+  { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf" },
+  { id: "barni", name: "バーニ", icon: "🐵", color: "#d4bd8e" },
+  { id: "riu", name: "リウ", icon: "🐔", color: "#e39b88" },
+  { id: "pafu", name: "ぱふ", icon: "🐶", color: "#c9a77c" },
+  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐗", color: "#a99a91" },
+];
+
+function randomCharacter() {
+  return CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
+}
+
+function createInitialHand() {
+  game.hand = Array.from({ length: 4 }, randomCharacter);
+  game.selectedHandIndex = 0;
+  game.pendingHandIndex = null;
+  renderHand();
+}
+
+function renderHand() {
+  const bar = document.getElementById("handBar");
+  if (!bar) return;
+  bar.replaceChildren();
+  game.hand.forEach((character, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "handCard" + (index === game.selectedHandIndex ? " selected" : "") + (!game.launcherReady ? " locked" : "");
+    button.dataset.index = String(index);
+    button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
+    button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}`;
+    button.style.borderBottomColor = character.color;
+    button.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!game.launcherReady || game.shotInProgress) return;
+      game.selectedHandIndex = index;
+      renderHand();
+    });
+    bar.appendChild(button);
+  });
+}
 
 // ランチャー(投げる石の待機位置):画面最下部。盤の外から滑り込む
 function launcherPos() {
@@ -306,7 +382,7 @@ function minThrowSpeed() {
   return clamp(v, CONFIG.MIN_THROW_SPEED_FLOOR, CONFIG.MAX_THROW_SPEED);
 }
 
-function createPiece(x, y, role) {
+function createPiece(x, y, role, character = null) {
   return {
     x, y, vx: 0, vy: 0, rot: 0,
     role,
@@ -316,6 +392,16 @@ function createPiece(x, y, role) {
     curveTurned: 0,
     entered: Math.hypot(x, y) < CONFIG.BOARD_RADIUS,
     trail: [],
+    characterId: character?.id ?? null,
+    characterName: character?.name ?? null,
+    color: character?.color ?? null,
+    mods: {
+      speedMult: 1,
+      curveMult: 1,
+      knockResist: 1,
+      selfStopMult: 1,
+      restitution: 0,
+    },
   };
 }
 
@@ -363,6 +449,13 @@ function buildScenario(n) {
   }
   game.scenario = n;
   game.launcherReady = true;
+  game.aim = null;
+  game.turn = 1;
+  game.shotInProgress = false;
+  game.pendingHandIndex = null;
+  game.chainCountThisThrow = 0;
+  game.fastForward = 1;
+  createInitialHand();
   updateHUD();
 }
 
@@ -507,6 +600,18 @@ function pushCoef(pushDist) {
   return 1 - (1 - CONFIG.PUSH_MIN_COEF) * t;
 }
 
+// 最弱速度と最大速度を両端として、操作パワーを実際の初速へ変換する。
+// 従来の base * coef は中〜強パワーまで速度を大きく削っていたため、PROTO24では
+// 正規化したパワーに急加速カーブを適用する。power=0は従来の最弱位置を維持し、
+// power=1では引き量に応じて新しい最大速度まで伸びる。
+function throwSpeedFromPower(baseSpeed, coef) {
+  const minSpeed = minThrowSpeed();
+  const maxSpeed = clamp(baseSpeed, minSpeed, CONFIG.MAX_THROW_SPEED);
+  const power = clamp((coef - CONFIG.PUSH_MIN_COEF) / (1 - CONFIG.PUSH_MIN_COEF), 0, 1);
+  const curvedPower = Math.pow(power, CONFIG.POWER_CURVE_EXPONENT);
+  return minSpeed + (maxSpeed - minSpeed) * curvedPower;
+}
+
 // パワーの強さ(pushCoef: 1=短い押し出し=強い 〜 PUSH_MIN_COEF=長い押し出し=弱い)を
 // 赤(強)→淡色(弱)へ線形補間する。押し出し操作中のショット強さの可視化に使う
 function powerColor(coef) {
@@ -568,22 +673,39 @@ function finalizeAim(aim, px, py) {
   // 一方通行(弱める一方)になっていた。前後にスワイプするだけでパワーを
   // 自由に上げ下げしてから離せるよう、リリース時点の実際の押し出し位置を使う
   const base = clamp(aim.peakDraw * CONFIG.DRAW_TO_SPEED_SCALE, 0, CONFIG.MAX_THROW_SPEED);
-  const speed = clamp(base * pushCoef(aim.pushDist), minThrowSpeed(), CONFIG.MAX_THROW_SPEED);
+  const speed = throwSpeedFromPower(base, pushCoef(aim.pushDist));
 
   return { dirX: aim.aimDirX, dirY: aim.aimDirY, curve, speed };
 }
 
 function throwPiece(params) {
   if (!game.launcherReady) return;
+  const handIndex = game.selectedHandIndex;
+  const character = game.hand[handIndex];
+  if (!character) return;
   const launch = launcherPos();
-  const p = createPiece(launch.x, launch.y, "player");
+  const p = createPiece(launch.x, launch.y, "player", character);
   p.vx = params.dirX * params.speed;
   p.vy = params.dirY * params.speed;
   p.curve = params.curve;
   game.pieces.push(p);
   game.launcherReady = false;
+  game.shotInProgress = true;
+  game.pendingHandIndex = handIndex;
   game.chainCountThisThrow = 0;
   game.fastForward = 1; // 新しい投球の滑走は通常速度から始める(早送りは止まりかけで自動的にかかる)
+  renderHand();
+}
+
+function completeTurn() {
+  if (!game.shotInProgress) return;
+  const usedIndex = game.pendingHandIndex;
+  if (usedIndex !== null) game.hand[usedIndex] = randomCharacter();
+  game.turn += 1;
+  game.shotInProgress = false;
+  game.pendingHandIndex = null;
+  game.selectedHandIndex = usedIndex ?? 0;
+  renderHand();
 }
 
 /* ---------- 物理更新(サブステップ分割、すり抜け防止) ---------- */
@@ -811,6 +933,7 @@ function physicsStep() {
     if (!anyMoving) {
       game.launcherReady = true;
       if (game.chainCountThisThrow >= 2) showChainToast(game.chainCountThisThrow);
+      completeTurn();
     }
   }
 
@@ -981,7 +1104,8 @@ function render() {
   ctx.lineWidth = 2;
   ctx.stroke();
   if (game.launcherReady) {
-    drawPiece(stoneX, stoneY, CONFIG.PIECE_RADIUS * view.scale, ROLE_COLOR.player, 0, 1);
+    const selectedCharacter = game.hand[game.selectedHandIndex];
+    drawPiece(stoneX, stoneY, CONFIG.PIECE_RADIUS * view.scale, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1);
   }
 
   // 投球UI
@@ -1083,7 +1207,7 @@ function render() {
       r *= 1 - 0.7 * t;
       alpha = 1 - t;
     }
-    drawPiece(s.x, s.y, r, ROLE_COLOR[p.role], p.rot, alpha);
+    drawPiece(s.x, s.y, r, p.color ?? ROLE_COLOR[p.role], p.rot, alpha);
   }
 
   ctx.restore(); // 衝突演出の変換を解除
@@ -1125,16 +1249,17 @@ function drawPiece(x, y, r, color, rot, alpha) {
 let lastHUD = "";
 function updateHUD() {
   const onboard = game.pieces.filter(p => p.state === "onboard" && p.entered).length;
-  const s = onboard + "|" + game.scenario;
+  const s = onboard + "|" + game.scenario + "|" + game.turn;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("countText").textContent = onboard;
+  document.getElementById("turnText").textContent = game.turn;
   document.getElementById("scenarioNameText").textContent = SCENARIO_NAMES[game.scenario];
 }
 
 /* ---------- 入力 ---------- */
 window.addEventListener("pointerdown", (e) => {
-  if (e.target.closest("#scenarioBar")) return;
+  if (e.target.closest("#scenarioBar") || e.target.closest("#handBar")) return;
   if (game.aim !== null || !game.launcherReady) return;
   e.preventDefault();
   startAim(e.pointerId, e.clientX, e.clientY);
