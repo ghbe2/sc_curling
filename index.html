@@ -152,7 +152,7 @@
     pointer-events: none; transition: opacity 0.15s, width 0.15s;
   }
   #throwTutorial.hidden { opacity: 0; }
-  #tutorialToggle { position: absolute; right: 4px; top: 4px; border: 0; border-radius: 8px; padding: 2px 5px; color: #e91e63; background: #fff0f5; font: 9px 'DotGothic16', sans-serif; pointer-events: auto; }
+  #tutorialToggle { position: absolute; right: 0; top: auto; bottom: -25px; border: 2px solid #f48fb1; border-radius: 0 0 9px 9px; padding: 3px 8px; color: #e91e63; background: #fff; font: 9px 'DotGothic16', sans-serif; pointer-events: auto; }
   #throwTutorial.minimized { width: 76px; padding: 8px; }
   #throwTutorial.minimized .tutorialBody { display: none; }
   #throwTutorial.minimized #tutorialToggle { position: static; width: 100%; }
@@ -894,7 +894,8 @@ function finalizeAim(aim, px, py) {
   // 無回転は排除(最低CURVE_MINを保証)
   let curve = lateralCurveAt(aim, px, py);
   if (Math.abs(curve) < CONFIG.CURVE_MIN) {
-    const sign = curve !== 0 ? Math.sign(curve) : (Math.random() < 0.5 ? -1 : 1);
+    // 完全中央は右方向へ統一し、投球前の予測線と実際の軌道を一致させる。
+    const sign = curve !== 0 ? Math.sign(curve) : 1;
     curve = sign * CONFIG.CURVE_MIN;
   }
 
@@ -947,6 +948,59 @@ function completeTurn() {
   game.buttonDanger = Boolean(enemyAtCenter());
   game.turnAlertLevel = game.buttonDanger ? "pinch" : (enemyOnHouse() ? "house" : "none");
   renderHand();
+}
+
+// 現在の入力を、実際の回頭・摩擦・転がり抵抗と同じ式で仮想的に滑らせる。
+// 衝突だけは未来の相手位置に左右されるため含めず、最初に何も当たらなかった場合の軌道を示す。
+function drawPredictedShotPath(aim, color) {
+  const character = game.hand[game.selectedHandIndex];
+  const mods = character?.mods ?? {};
+  const base = clamp(aim.peakDraw * CONFIG.DRAW_TO_SPEED_SCALE, 0, CONFIG.MAX_THROW_SPEED);
+  let speed = throwSpeedFromPower(base, pushCoef(aim.pushDist)) * (mods.speedMult ?? 1);
+  let curve = lateralCurveAt(aim, aim.fx, aim.fy);
+  if (Math.abs(curve) < CONFIG.CURVE_MIN) curve = (curve < 0 ? -1 : 1) * CONFIG.CURVE_MIN;
+  let vx = aim.aimDirX * speed;
+  let vy = aim.aimDirY * speed;
+  let x = launcherPos().x;
+  let y = launcherPos().y;
+  let turned = 0;
+  const frictionMult = mods.frictionMult ?? 1;
+  const dt = CONFIG.TIME_SCALE * 0.5;
+
+  ctx.beginPath();
+  const start = toScreen(x, y);
+  ctx.moveTo(start.x, start.y);
+  for (let step = 0; step < 1800 && speed >= CONFIG.SETTLE_SPEED; step++) {
+    const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
+    if (Math.abs(turned) < CONFIG.CURVE_MAX_ANGLE) {
+      const dTheta = CONFIG.CURVE_STRENGTH * curve * slow * dt * (mods.pathCurveMult ?? 1);
+      const c = Math.cos(dTheta), sn = Math.sin(dTheta);
+      const nvx = vx * c - vy * sn;
+      const nvy = vx * sn + vy * c;
+      vx = nvx; vy = nvy; turned += dTheta;
+    }
+    const fricEff = Math.pow(CONFIG.FRICTION, dt * frictionMult);
+    vx *= fricEff; vy *= fricEff;
+    const afterFriction = Math.hypot(vx, vy);
+    if (afterFriction > 0) {
+      const afterResistance = Math.max(0, afterFriction - CONFIG.ROLLING_RESISTANCE * dt * frictionMult);
+      const scale = afterResistance / afterFriction;
+      vx *= scale; vy *= scale;
+    }
+    x += vx * dt; y += vy * dt;
+    speed = Math.hypot(vx, vy);
+    if (step % 8 === 0) {
+      const point = toScreen(x, y);
+      ctx.lineTo(point.x, point.y);
+    }
+    if (Math.hypot(x, y) > CONFIG.OUT_RADIUS * 1.15) break;
+  }
+  ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.78)`;
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.setLineDash([10, 7]);
+  ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 // 二段階操作: 1ジェスチャー目で照準を固定し、2ジェスチャー目の前スワイプで投げる。
@@ -1705,6 +1759,13 @@ function render() {
     ctx.fillStyle = ring.color;
     ctx.fill();
   }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#e91e63";
+  ctx.font = `700 ${Math.max(15, hR / 9)}px 'DotGothic16', sans-serif`;
+  ctx.fillText("♡", 0, 1);
+  ctx.font = `700 ${Math.max(11, hR / 13)}px 'DotGothic16', sans-serif`;
+  ctx.fillText("♡を守れ！", 0, hR + 18);
 
   // 格子ガイド(デバッグ表示用):狙い位置↔着地位置を数値で共有しやすくするための目安線。
   // 盤の円でクリップしてから、盤中心(0,0)基準の等間隔グリッドを引く
@@ -1787,22 +1848,7 @@ function render() {
       // 押し出し中:回転方向へ曲がる一本の軌道線で予測を示す。
       const coef = pushCoef(a.pushDist); // 実際の投擲パワー判定と同じ基準(pushDist=現在値)で表示を揃える
       const color = powerColor(coef);
-      const lx = launchBase.x, ly = launchBase.y;
-      const selectedCharacter = game.hand[game.selectedHandIndex];
-      const liveCurve = lateralCurveAt(a, a.fx, a.fy) * (selectedCharacter?.mods?.pathCurveMult ?? 1);
-      const perpX = -a.aimDirY, perpY = a.aimDirX;
-      const bend = clamp(liveCurve, -1.5, 1.5) * guideLen * 0.34;
-      ctx.beginPath();
-      ctx.moveTo(lx, ly);
-      ctx.quadraticCurveTo(
-        lx + a.aimDirX * guideLen * 0.58,
-        ly + a.aimDirY * guideLen * 0.58,
-        lx + a.aimDirX * guideLen + perpX * bend,
-        ly + a.aimDirY * guideLen + perpY * bend
-      );
-      ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.72)`;
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      drawPredictedShotPath(a, color);
     } else {
       // 引き中:狙いに追従する単純な白線(従来どおり)
       ctx.beginPath();
@@ -2078,7 +2124,7 @@ function bindTutorialToggle() {
   try { panel.classList.toggle("minimized", localStorage.getItem("curlingTutorialMinimized") === "1"); } catch {}
   const refresh = () => {
     const minimized = panel.classList.contains("minimized");
-    button.textContent = minimized ? "？ 投げ方" : "− とじる";
+    button.textContent = minimized ? "？ 投げ方" : "− かくす";
     button.setAttribute("aria-expanded", String(!minimized));
   };
   refresh();
