@@ -201,7 +201,7 @@
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
 </div>
-<button class="btn" id="fastForwardBtn">▶▶<br>まてない！</button>
+<button class="btn" id="fastForwardBtn">▶▶<br>はやく♡</button>
 <div id="throwTutorial">
   <button id="tutorialToggle" type="button" aria-expanded="true">− とじる</button>
   <div class="tutorialBody">
@@ -994,10 +994,11 @@ function drawPredictedShotPath(aim, color) {
       const point = toScreen(x, y);
       ctx.lineTo(point.x, point.y);
     }
-    if (Math.hypot(x, y) > CONFIG.OUT_RADIUS * 1.15) break;
+    // 発射地点は盤外にあるため、距離だけで打ち切ると数pxでガイドが消える。
+    // 停止するか十分な予測時間に達するまで、盤外から入ってくる区間も描き切る。
   }
   ctx.lineCap = "round";
-  ctx.setLineDash([10, 7]);
+  ctx.setLineDash([]);
   // ピンク背景や最弱パワーでも消えないよう、白い縁取りの上に濃い紫を重ねる。
   ctx.strokeStyle = "rgba(255,255,255,0.92)";
   ctx.lineWidth = 7;
@@ -1318,11 +1319,8 @@ function physicsStep() {
             tSpeed *= lowSpeedDamping;
             const targetRelationMult = T.role === "enemy" ? S.mods.enemyKnockMult : S.mods.allyKnockMult;
             tSpeed *= targetRelationMult;
-            if (game.phase === "enemyMoving" && S.role === "enemy" && T.role === "player") {
-              // ガードを押しのけやすくする一方、敵自身も大きく減速する。
-              tSpeed *= 1.55;
-              sSpeed *= 0.58;
-            }
+            const enemyAdvancePush = game.phase === "enemyMoving" && S.role === "enemy" && T.role === "player";
+            if (enemyAdvancePush) tSpeed *= 2.0;
             sSpeed *= S.mods.selfStopMult;
             tSpeed *= T.mods.knockResist;
 
@@ -1344,6 +1342,12 @@ function physicsStep() {
             // テイクされた石は、接触点から石の中心へ向かう法線上に進む。
             // 回転による曲がりは、この初速を与えた後の通常のカーブ処理で加える。
             T.vx = Told_x + nSTx * tSpeed; T.vy = Told_y + nSTy * tSpeed;
+            if (enemyAdvancePush) {
+              // 正面衝突でも敵を停止させず、接触前の進行方向へ速度を約80%残す。
+              // 味方は強く押し出されるが、接触による遅延そのものは残る。
+              S.vx = Told_x + dirIx * relSpeed * 0.8;
+              S.vy = Told_y + dirIy * relSpeed * 0.8;
+            }
 
             // 瑞珠: 通常はゼロの反発成分を接触法線方向へ追加する。
             // S/Tのどちらが瑞珠でも「ぼよよん」が起きるが、既存の入射角配分はそのまま残す。
