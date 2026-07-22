@@ -187,8 +187,8 @@ const CONFIG = {
    *  ・回頭 = CURVE_STRENGTH × curve × 速度効き(直進化の抑制項は廃止、curveに単純比例)
    *  ・摩擦は回転量によらず一定(FRICTIONのみ。PROTO23でSPIN_GLIDEを廃止、下記参照)
    * --- */
-  CURVE_STRENGTH: 0.014, // PROTO24:全体的にカーブを感じやすくするため0.011→0.014(+約27%)。
-                          // 入力感度もCURVE_DIST_SCALEで上げ、回転量と実際の回頭の双方を強化
+  CURVE_STRENGTH: 0.042, // PROTO24:カーブ差を明確に体感する実験として0.014→0.042(3倍)。
+                          // ミナリ/アウネは個体倍率でここから大きく差を付ける
   CURVE_VREF: 8,         // 回頭の速度依存の基準(px/frame)。効き = (VREF/(VREF+速度))^CURVE_SLOW_POWER
   CURVE_SLOW_POWER: 2.4, // 速度効きの非線形さ。新設:「減速してくる後半ほどきつく曲がる」を強調するため、
                           // 速度依存の効きを単純な反比例(指数1)から2.4乗に変更。速いうちはより強く
@@ -363,10 +363,10 @@ const ENEMIES = [
 
 const CHARACTERS = [
   { id: "mayuu", name: "マユゥ", icon: "🐭", color: "#e8d7bd", trait: "スタンダード", mods: {} },
-  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8", trait: "曲がりにくい", mods: { curveMult: 0.6 } },
-  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f", trait: "大きく曲がる", mods: { curveMult: 1.7 } },
-  { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da", trait: "ゆっくり", mods: { speedMult: 0.8 } },
-  { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb", trait: "スピード", mods: { speedMult: 1.2 } },
+  { id: "minari", name: "ミナリ", icon: "🐮", color: "#c9d7e8", trait: "超直進 0.25×", mods: { curveMult: 0.25 } },
+  { id: "aune", name: "アウネ", icon: "🐯", color: "#efb45f", trait: "超カーブ 2.5×", mods: { curveMult: 2.5 } },
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐰", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
+  { id: "mokokun", name: "モコクン", icon: "🐲", color: "#9dd6bb", trait: "大型 1.2×", mods: { radiusScale: 1.2 } },
   { id: "belpet", name: "ベルペット", icon: "🐍", color: "#b9acd9", trait: "能力準備中", mods: {} },
   { id: "rako", name: "ラコ", icon: "🐴", color: "#d7a982", trait: "能力準備中", mods: {} },
   { id: "mizu", name: "瑞珠", icon: "🐑", color: "#eee6cf", trait: "能力準備中", mods: {} },
@@ -400,6 +400,8 @@ function renderHand() {
     button.dataset.characterId = character.id;
     button.dataset.speedMult = String(character.mods.speedMult ?? 1);
     button.dataset.curveMult = String(character.mods.curveMult ?? 1);
+    button.dataset.radiusScale = String(character.mods.radiusScale ?? 1);
+    button.dataset.trajectoryGuide = String(character.mods.trajectoryGuide ?? false);
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
     button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>`;
     button.style.borderBottomColor = character.color;
@@ -446,9 +448,15 @@ function createPiece(x, y, role, character = null) {
       knockResist: 1,
       selfStopMult: 1,
       restitution: 0,
+      radiusScale: 1,
+      trajectoryGuide: false,
       ...(character?.mods ?? {}),
     },
   };
+}
+
+function pieceRadius(piece) {
+  return CONFIG.PIECE_RADIUS * (piece?.mods?.radiusScale ?? 1);
 }
 
 /* ---------- サバイバル初期化 ---------- */
@@ -863,7 +871,7 @@ function physicsStep() {
         p.rot += spinRatePerFrame(Math.abs(p.curve)) * Math.sign(p.curve) * fastForwardMult / sub;
       } else if (ns > 0.01) {
         const sign = Math.abs(p.vx) >= Math.abs(p.vy) ? Math.sign(p.vx) : Math.sign(p.vy);
-        p.rot += (ns * k / CONFIG.PIECE_RADIUS) * (sign || 1);
+        p.rot += (ns * k / pieceRadius(p)) * (sign || 1);
       }
     }
 
@@ -877,7 +885,7 @@ function physicsStep() {
         if (b.state !== "onboard") continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const dist = Math.hypot(dx, dy);
-        const minDist = CONFIG.PIECE_RADIUS * 2;
+        const minDist = pieceRadius(a) + pieceRadius(b);
         if (dist >= minDist || dist === 0) continue;
 
         const nx = dx / dist, ny = dy / dist;
@@ -955,7 +963,7 @@ function physicsStep() {
     for (const p of game.pieces) {
       if (p.state !== "onboard") continue;
       const r = Math.hypot(p.x, p.y);
-      const limit = CONFIG.BOARD_RADIUS - CONFIG.PIECE_RADIUS * 0.3;
+      const limit = CONFIG.BOARD_RADIUS - pieceRadius(p) * 0.3;
 
       if (!p.entered) {
         if (r < limit) {
@@ -1090,6 +1098,68 @@ function toScreen(x, y) {
   return { x: view.cx + x * view.scale, y: view.cy + y * view.scale };
 }
 
+// ユゥナリナ用: 現在の狙い線上で最初に接触する石を求める。
+// 既存衝突モデルでは当てられた石は入射方向へ進むため、その最初の1本だけをガイドする。
+function firstTrajectoryGuideHit(aim, shooterRadius) {
+  const origin = launcherPos();
+  let nearest = null;
+  for (const target of game.pieces) {
+    if (target.state !== "onboard") continue;
+    const dx = target.x - origin.x, dy = target.y - origin.y;
+    const along = dx * aim.aimDirX + dy * aim.aimDirY;
+    if (along <= 0) continue;
+    const perpendicularSq = dx * dx + dy * dy - along * along;
+    const hitRadius = shooterRadius + pieceRadius(target);
+    if (perpendicularSq > hitRadius * hitRadius) continue;
+    const contactDistance = along - Math.sqrt(Math.max(0, hitRadius * hitRadius - perpendicularSq));
+    if (contactDistance < 0 || (nearest && contactDistance >= nearest.contactDistance)) continue;
+    nearest = {
+      target,
+      contactDistance,
+      contactX: origin.x + aim.aimDirX * contactDistance,
+      contactY: origin.y + aim.aimDirY * contactDistance,
+    };
+  }
+  return nearest;
+}
+
+function drawTrajectoryGuide(aim, shooterRadius) {
+  const hit = firstTrajectoryGuideHit(aim, shooterRadius);
+  if (!hit) return;
+  const launch = toScreen(launcherPos().x, launcherPos().y);
+  const contact = toScreen(hit.contactX, hit.contactY);
+  const target = toScreen(hit.target.x, hit.target.y);
+  const guideLength = 170 * view.scale;
+  const endX = target.x + aim.aimDirX * guideLength;
+  const endY = target.y + aim.aimDirY * guideLength;
+
+  ctx.save();
+  ctx.setLineDash([7, 5]);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(118,235,255,0.72)";
+  ctx.beginPath();
+  ctx.moveTo(launch.x, launch.y);
+  ctx.lineTo(contact.x, contact.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(255,218,104,0.9)";
+  ctx.beginPath();
+  ctx.moveTo(target.x, target.y);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const arrowAngle = Math.atan2(aim.aimDirY, aim.aimDirX);
+  ctx.fillStyle = "rgba(255,218,104,0.95)";
+  ctx.beginPath();
+  ctx.moveTo(endX, endY);
+  ctx.lineTo(endX - Math.cos(arrowAngle - 0.45) * 10, endY - Math.sin(arrowAngle - 0.45) * 10);
+  ctx.lineTo(endX - Math.cos(arrowAngle + 0.45) * 10, endY - Math.sin(arrowAngle + 0.45) * 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 const ROLE_COLOR = { player: "#6fa8ff", enemy: "#d94f4f", wall: "#8a8078" };
 
 function render() {
@@ -1176,13 +1246,18 @@ function render() {
     stoneY -= a.aimDirY * (back - fwd);
   }
   ctx.beginPath();
-  ctx.arc(launchBase.x, launchBase.y, CONFIG.PIECE_RADIUS * view.scale * 1.15, 0, Math.PI * 2);
+  const selectedCharacter = game.hand[game.selectedHandIndex];
+  const launcherRadius = CONFIG.PIECE_RADIUS * (selectedCharacter?.mods?.radiusScale ?? 1) * view.scale;
+  ctx.arc(launchBase.x, launchBase.y, launcherRadius * 1.15, 0, Math.PI * 2);
   ctx.strokeStyle = game.launcherReady ? "rgba(111,168,255,0.7)" : "rgba(255,255,255,0.15)";
   ctx.lineWidth = 2;
   ctx.stroke();
   if (game.launcherReady) {
-    const selectedCharacter = game.hand[game.selectedHandIndex];
-    drawPiece(stoneX, stoneY, CONFIG.PIECE_RADIUS * view.scale, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1);
+    drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, 0, 1);
+  }
+
+  if (a && selectedCharacter?.mods?.trajectoryGuide) {
+    drawTrajectoryGuide(a, launcherRadius / view.scale);
   }
 
   // 投球UI
@@ -1278,7 +1353,7 @@ function render() {
   // ピース
   for (const p of game.pieces) {
     const s = toScreen(p.x, p.y);
-    let r = CONFIG.PIECE_RADIUS * view.scale;
+    let r = pieceRadius(p) * view.scale;
     let alpha = 1;
     if (p.state === "exiting") {
       const t = Math.min(1, p.fallT / 0.5);
