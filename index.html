@@ -74,6 +74,12 @@
   }
   .handCard .icon { display: block; font-size: 17px; margin-bottom: 2px; }
   .handCard .trait { display: block; font-size: 8px; opacity: 0.62; margin-top: 2px; }
+  .handCard { position: relative; }
+  .handCard .evolvedBadge {
+    position: absolute; top: -6px; right: -4px; font-size: 13px;
+    color: #ffcf33; text-shadow: 0 0 4px rgba(255,180,0,0.9), 0 1px 2px rgba(120,60,0,0.5);
+    animation: selectedFloat 0.9s ease-in-out infinite alternate;
+  }
   .handCard.selected {
     border-color: #e91e63; background: #fff0f5;
     box-shadow: 0 0 0 2px rgba(233,30,99,0.2), 0 5px 16px rgba(80,30,50,0.16);
@@ -599,6 +605,8 @@ const game = {
   turn: 1,
   hand: [],
   selectedHandIndex: null,
+  stagedEvolved: false, // ランチャーに置いた石が合体済み(1段階進化)か
+  carry: null,          // 手札から掴んで運んでいる最中の石 {index, character, x, y}
   pendingHandIndex: null,
   refillHandIndex: null,
   shotInProgress: false,
@@ -645,6 +653,23 @@ const CHARACTERS = [
   { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.3×", mods: { radiusScale: 1.3 } },
   { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
 ];
+
+// 合体進化(1段階のみ)。ランチャーに置いた石へ同じ石を重ねると、その石の効果が進化する。
+// ミナリ=小さくなる/ベルペット=大きくなる(ユーザー指定)。他は主効果を強化。throwPieceで適用。
+const EVOLVE_MODS = {
+  minari:    { radiusScale: 0.62 },              // 小さくなる(狙われにくい)
+  aune:      { pathCurveMult: 1.4 },             // もっと曲がる
+  yuunarina: { radiusScale: 0.6 },               // さらに小型(軌道予測は元から)
+  mayuu:     { scoreMult: 3 },                    // 得点倍率アップ
+  belpet:    { radiusScale: 1.5, knockResist: 0.12 }, // 大きくなる&もっと飛びづらい
+  rako:      { selfStopMult: 0.06 },             // さらに急停止
+  mokokun:   { radiusScale: 1.6 },               // さらに大型
+  mizu:      { restitution: 0.55 },              // さらに反発
+  pafu:      { allyKnockMult: 0.24, enemyKnockMult: 3.2 },
+  barni:     { radiusScale: 1.22 },
+  riu:       { radiusScale: 1.22 },
+  hiroibeo:  { radiusScale: 0.78 },
+};
 
 // 段階アンロック(ユーザー指定):最初は固定の基本キャラ、以降はランダムな順で解禁。
 const CHARACTER_STARTERS = ["minari", "aune", "yuunarina", "mayuu"]; // 味方の初期4種
@@ -703,6 +728,33 @@ function createInitialHand() {
   game.selectedHandIndex = null;
   game.pendingHandIndex = null;
   game.refillHandIndex = null;
+  game.stagedEvolved = false;
+  renderHand();
+}
+
+// 手札カードを「置く/合体」する。ランチャーに既に同じ石が置かれていれば合体(1段階進化)、
+// そうでなければその石を置く(選択)。タップでもドラッグでも呼ばれる。
+function activateHandCard(index) {
+  if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
+  const staged = game.selectedHandIndex;
+  const thisChar = game.hand[index];
+  if (!thisChar) return;
+  const canMerge = staged !== null && staged !== index && !game.stagedEvolved &&
+    game.hand[staged] && game.hand[staged].id === thisChar.id;
+  if (canMerge) {
+    // 合体:置いてある石が進化。重ねた側の手札を消費して補充。
+    game.stagedEvolved = true;
+    game.hand[index] = randomCharacter();
+    game.refillHandIndex = index;
+    addImpactFx(launcherPos().x, launcherPos().y, 3.2, false);
+    playUiPopSound(360, 0.05);
+  } else {
+    // 置く(選択)。別の石に持ち替えたら進化はリセット。
+    game.selectedHandIndex = index;
+    game.stagedEvolved = false;
+    game.refillHandIndex = null;
+    playUiPopSound(230, 0.045);
+  }
   renderHand();
 }
 
@@ -725,16 +777,27 @@ function renderHand() {
     button.dataset.scoreMult = String(character.mods.scoreMult ?? 1);
     button.dataset.partType = character.mods.partType ?? "none";
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
-    button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>`;
+    const evolvedBadge = (index === game.selectedHandIndex && game.stagedEvolved) ? `<span class="evolvedBadge">★</span>` : "";
+    button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>${evolvedBadge}`;
     button.style.borderBottomColor = character.color;
+    // 掴んで運ぶ:pointerdownで運搬開始、pointerupで「置く/合体」を判定(タップでも同ロジックで動く)
     button.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       e.preventDefault();
       if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
-      game.selectedHandIndex = index;
-      game.refillHandIndex = null;
-      playUiPopSound(230, 0.045);
-      renderHand();
+      game.carry = { index, character, x: e.clientX, y: e.clientY };
+      button.setPointerCapture?.(e.pointerId);
+      const move = (ev) => { if (game.carry) { game.carry.x = ev.clientX; game.carry.y = ev.clientY; } };
+      const up = () => {
+        button.removeEventListener("pointermove", move);
+        button.removeEventListener("pointerup", up);
+        button.removeEventListener("pointercancel", up);
+        game.carry = null;
+        activateHandCard(index);
+      };
+      button.addEventListener("pointermove", move);
+      button.addEventListener("pointerup", up);
+      button.addEventListener("pointercancel", up);
     });
     bar.appendChild(button);
   });
@@ -1363,6 +1426,11 @@ function throwPiece(params) {
   }
   const p = createPiece(launch.x, launch.y, "player", character);
   p.isCurrentShot = true;
+  // 合体済みなら進化効果を適用(1段階)。以降の描画で★リングを付ける。
+  if (game.stagedEvolved) {
+    Object.assign(p.mods, EVOLVE_MODS[character.id] || { radiusScale: (p.mods.radiusScale ?? 1) * 0.85 });
+    p.evolved = true;
+  }
   const speed = params.speed * p.mods.speedMult;
   p.vx = params.dirX * speed;
   p.vy = params.dirY * speed;
@@ -1373,6 +1441,7 @@ function throwPiece(params) {
   game.phase = "playerMoving";
   game.shotInProgress = true;
   game.pendingHandIndex = handIndex;
+  game.stagedEvolved = false; // 投げたら合体状態はリセット
   game.chainCountThisThrow = 0;
   game.raiseTakeThisThrow = false;
   game.buttonDrawThisThrow = false;
@@ -2502,7 +2571,10 @@ function render() {
   }
   ctx.beginPath();
   const selectedCharacter = game.selectedHandIndex === null ? null : game.hand[game.selectedHandIndex];
-  const launcherRadius = CONFIG.PIECE_RADIUS * (selectedCharacter?.mods?.radiusScale ?? 1) * view.scale;
+  // 合体済みなら進化後のサイズ(radiusScale)をプレビューに反映
+  const stagedEvo = game.stagedEvolved && selectedCharacter ? (EVOLVE_MODS[selectedCharacter.id] || {}) : {};
+  const launcherRadiusScale = stagedEvo.radiusScale ?? selectedCharacter?.mods?.radiusScale ?? 1;
+  const launcherRadius = CONFIG.PIECE_RADIUS * launcherRadiusScale * view.scale;
   const launcherWobbling = game.launcherReady && selectedCharacter && !a && !game.lockedAim;
   const launcherWobble = launcherWobbling ? performance.now() / 430 : 0;
   if (launcherWobbling) {
@@ -2515,6 +2587,20 @@ function render() {
   ctx.stroke();
   if (game.launcherReady && selectedCharacter) {
     drawPiece(stoneX, stoneY, launcherRadius, selectedCharacter?.color ?? ROLE_COLOR.player, launcherWobbling ? Math.sin(launcherWobble * 0.9) * 0.035 : 0, 1, selectedCharacter?.mods?.partType, selectedCharacter?.icon);
+    // 合体済みの目印:金色のリング+★
+    if (game.stagedEvolved) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(stoneX, stoneY, launcherRadius * 1.28, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,203,51,0.95)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = "#ffcf33";
+      ctx.font = `${Math.max(12, launcherRadius * 0.5)}px system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("★", stoneX + launcherRadius * 0.95, stoneY - launcherRadius * 0.95);
+      ctx.restore();
+    }
   }
 
   if (!a && game.lockedAim) {
@@ -2654,6 +2740,15 @@ function render() {
       ctx.fill();
       ctx.restore();
     }
+    if (p.evolved && p.state === "onboard") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(drawX, drawY, r * 1.22, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,203,51,0.85)";
+      ctx.lineWidth = Math.max(2, r * 0.09);
+      ctx.stroke();
+      ctx.restore();
+    }
     drawPiece(drawX, drawY, r, p.color ?? ROLE_COLOR[p.role], drawRot, alpha, p.mods.partType, p.icon, p.role === "enemy");
   }
 
@@ -2661,6 +2756,15 @@ function render() {
   if (game.impactFlash > 0) {
     ctx.fillStyle = `rgba(255,245,252,${game.impactFlash * 0.22})`;
     ctx.fillRect(0, 0, w, h);
+  }
+  // 手札から掴んで運んでいる最中の石を指の位置に描く(「掴んで持ってくる」演出)
+  if (game.carry) {
+    const c = game.carry;
+    const rr = CONFIG.PIECE_RADIUS * (c.character.mods.radiusScale ?? 1) * view.scale * 0.92;
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    drawPiece(c.x, c.y - rr * 0.6, rr, c.character.color ?? ROLE_COLOR.player, 0, 1, c.character.mods.partType, c.character.icon);
+    ctx.restore();
   }
 }
 
