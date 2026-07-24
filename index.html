@@ -142,16 +142,20 @@
   #gameOverTitle { font-size: 25px; font-weight: 800; margin-bottom: 8px; }
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
   #sideInfo {
-    position: fixed; left: 8px; top: 8px; z-index: 2;
+    position: fixed; left: 8px; top: 8px; z-index: 5;
     transition: opacity 0.12s, transform 0.12s;
   }
   #sideInfo.hidden { opacity: 0; pointer-events: none; transform: translateX(-12px); }
   #scorePanel {
     color: #4a2133;
-    font: 700 15px/1 'DotGothic16', system-ui, sans-serif;
+    font: 700 15px/1.2 'DotGothic16', system-ui, sans-serif;
     pointer-events: none;
-    text-shadow: 0 2px 0 rgba(255,255,255,0.96), 0 0 9px rgba(255,255,255,0.9);
+    display: flex; flex-direction: column; gap: 3px;
+    background: rgba(255,255,255,0.82); border-radius: 12px;
+    padding: 7px 12px 8px; box-shadow: 0 2px 10px rgba(80,30,50,0.14);
   }
+  #scorePanel .label { opacity: 0.6; font-size: 11px; margin-right: 5px; }
+  #scorePanel #turnTextVisible { font-size: 16px; }
   #scorePanel .scoreValue { color: #e91e63; font-size: 27px; font-weight: 900; margin-left: 6px; }
   #scoreFeed { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 5px; pointer-events: none; }
   .scoreEvent {
@@ -293,12 +297,11 @@
   <button class="btn" id="howToBtn">遊び方</button>
   <button class="btn" id="characterBookBtn">キャラ性能</button>
   <button class="btn" id="allOutBtn" aria-pressed="false">ぜんぶ出す OFF</button>
-  <button class="btn" id="soundBtn" aria-pressed="true">🔊</button>
-  <button class="btn" id="resetBtn">RE</button>
 </div>
 <div id="handBar" aria-label="キャラストーン手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
+    <span id="scoreTurnRow"><span class="label">ターン</span><span id="turnTextVisible">1</span></span>
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
   <div id="scoreFeed" aria-live="polite"></div>
@@ -2126,7 +2129,7 @@ let audioCtx = null;
 let audioMaster = null;
 let slideGain = null;
 let slideFilter = null;
-let soundEnabled = true;
+let soundEnabled = false; // 全サウンドをフラットに0(一部キャラの滑走音しか鳴っていない現状を踏まえ、いったん無音化)
 const collisionPairTimes = new Map();
 
 function ensureAudio() {
@@ -2253,6 +2256,7 @@ function updateSlideSound() {
 
 function bindSoundButton() {
   const button = document.getElementById("soundBtn");
+  if (!button) return; // 🔊ボタンは廃止(無音化)
   button.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
     e.preventDefault();
@@ -2450,17 +2454,16 @@ function render() {
   ctx.fillStyle = "#e91e63";
   ctx.font = `${Math.max(16, hR / 8)}px 'Apple Color Emoji','Segoe UI Emoji',sans-serif`;
   ctx.fillText("💖", 0, 1 + heartFloat);
-  ctx.font = `700 ${Math.max(11, hR / 13)}px 'DotGothic16', sans-serif`;
-  ctx.fillText("敵を弾いて💖を守れ！", 0, hR + 18);
+  // 目的テキスト「敵を弾いて💖を守れ！」はチュートリアルに移したので盤面には表示しない
 
-  // 格子ガイド(デバッグ表示用):狙い位置↔着地位置を数値で共有しやすくするための目安線。
-  // 盤の円でクリップしてから、盤中心(0,0)基準の等間隔グリッドを引く
+  // 格子ガイド:縦線がストーン中心に来るよう、間隔をストーン直径(PIECE_RADIUS×2)にする。
+  // これで隣り合うストーンがそれぞれ縦線上に中心を合わせて並ぶ。盤の円でクリップして描画。
   ctx.save();
   ctx.beginPath();
   ctx.arc(0, 0, R * 0.97, 0, Math.PI * 2);
   ctx.clip();
-  const gs = CONFIG.GRID_SPACING * view.scale;
-  ctx.strokeStyle = "rgba(0,0,0,0)";
+  const gs = CONFIG.PIECE_RADIUS * 2 * view.scale;
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
   ctx.lineWidth = 1;
   for (let x = 0; x <= R * 1.05; x += gs) {
     ctx.beginPath(); ctx.moveTo(x, -R * 1.05); ctx.lineTo(x, R * 1.05); ctx.stroke();
@@ -2470,8 +2473,8 @@ function render() {
     ctx.beginPath(); ctx.moveTo(-R * 1.05, y); ctx.lineTo(R * 1.05, y); ctx.stroke();
     if (y > 0) { ctx.beginPath(); ctx.moveTo(-R * 1.05, -y); ctx.lineTo(R * 1.05, -y); ctx.stroke(); }
   }
-  // 中心を通る太めの十字線(原点の目印)
-  ctx.strokeStyle = "rgba(0,0,0,0)";
+  // 中心を通る少し濃い十字線(原点=ランチャー中心の目印。ストーン中心もここに合う)
+  ctx.strokeStyle = "rgba(255,255,255,0.20)";
   ctx.beginPath(); ctx.moveTo(0, -R * 1.05); ctx.lineTo(0, R * 1.05); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(-R * 1.05, 0); ctx.lineTo(R * 1.05, 0); ctx.stroke();
   ctx.restore();
@@ -2762,6 +2765,8 @@ function updateDangerAlert() {
   el.className = "";
   el.replaceChildren();
   if (game.phase !== "aim") return;
+  // 「ちかづいてきた！」(house段階)は常時表示気味で不要との指摘で廃止。
+  // ボタンに乗って敗北が迫る PINCH! だけ表示する。
   if (game.turnAlertLevel === "pinch") {
     el.className = "show pinch";
     el.textContent = "PINCH!";
@@ -2769,9 +2774,6 @@ function updateDangerAlert() {
     sub.className = "dangerSub";
     sub.textContent = "このショットでボタンから退けろ！";
     el.appendChild(sub);
-  } else if (game.turnAlertLevel === "house") {
-    el.className = "show house";
-    el.textContent = "ちかづいてきた！";
   }
 }
 
@@ -2785,7 +2787,9 @@ function updateHUD() {
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("totalScoreText").textContent = score.total;
-  // B対応:経過ターン(とウェーブ)を毎回反映(従来はHTMLに枠だけあり「1」固定だった)
+  // 経過ターンを毎回反映。#hudは非表示なので、スコアパネル内の可視ターン表示を更新する。
+  const turnVis = document.getElementById("turnTextVisible");
+  if (turnVis) turnVis.textContent = game.turn;
   const turnEl = document.getElementById("turnText");
   if (turnEl) turnEl.textContent = game.turn;
   const waveEl = document.getElementById("waveText");
@@ -2836,11 +2840,12 @@ window.addEventListener("pointercancel", () => {
 
 /* ---------- リセットボタン ---------- */
 function bindResetButtons() {
-  document.getElementById("resetBtn").addEventListener("pointerdown", (e) => {
+  // REボタンは廃止。ゲームオーバー時の「もう一度」(retryBtn)だけ残す。
+  document.getElementById("resetBtn")?.addEventListener("pointerdown", (e) => {
     e.stopPropagation(); e.preventDefault();
     buildSurvivalGame();
   });
-  document.getElementById("retryBtn").addEventListener("pointerdown", (e) => {
+  document.getElementById("retryBtn")?.addEventListener("pointerdown", (e) => {
     e.stopPropagation(); e.preventDefault();
     buildSurvivalGame();
   });
