@@ -216,15 +216,15 @@
   .tutorialFill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg,#81d4fa,#ff4081); transition: width 0.05s; }
   #spinMeter { position: relative; overflow: visible; }
   #spinMeter::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 11px; background: #4a2133; transform: translateX(-1px); }
-  /* ③なげる:縦=スピード / 横=カーブ を一体化した2Dパッド(指の動きとリンク) */
-  .powerPad { position: relative; width: 54px; height: 62px; margin: 3px auto 2px; border-radius: 8px;
-    background: linear-gradient(0deg,#8fd0f5,#ff7fae); border: 1px solid #f4b8cf; overflow: hidden; }
-  .powerPad .powerPadV { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.5); }
-  .powerPad .powerPadH { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,0.35); }
-  .powerPadMarker { position: absolute; left: 50%; top: 100%; width: 13px; height: 13px; margin: -7px 0 0 -7px;
-    border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #e91e63, 0 2px 6px rgba(80,30,50,0.35); transition: left 0.05s, top 0.05s; }
-  #tutorialThrow.active .powerPad { box-shadow: 0 0 0 2px rgba(233,30,99,0.3); }
-  #throwReadout { text-align: center; margin-top: 2px; font-size: 9px; }
+  /* ③なげる:縦=スピードバー(下から満ちる=強さ) / 横=カーブバー(中央基準) */
+  .throwRow { display: flex; gap: 8px; align-items: flex-end; margin-top: 3px; }
+  .speedBar { position: relative; width: 15px; height: 46px; border-radius: 8px; background: #f4dce5; overflow: hidden; flex: 0 0 auto; }
+  .speedBarFill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; background: linear-gradient(0deg,#81d4fa,#ff4081); transition: height 0.05s; }
+  .throwCol { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .gaugeLabel { font-size: 9px; text-align: center; }
+  .curveBar { position: relative; height: 8px; border-radius: 8px; background: #f4dce5; }
+  .curveBar::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 12px; background: #4a2133; transform: translateX(-1px); }
+  .curveBarFill { position: absolute; top: 0; bottom: 0; width: 0%; left: 50%; background: #ff4081; border-radius: 5px; transition: width 0.05s, left 0.05s; }
   #spinFill { position: absolute; left: 50%; width: 0; background: #ff4081; transition: width 0.05s, left 0.05s; }
   #spinReadout { text-align: center; margin-top: 3px; min-height: 14px; }
   body.ui-swapped #handBar { left: 7px; right: auto; }
@@ -332,9 +332,9 @@
 <div id="throwTutorial">
   <div id="tutorialControls"><button id="tutorialToggle" type="button" aria-expanded="true">かくす</button><button id="swapUiBtn" type="button">いれかえ</button></div>
   <div class="tutorialBody">
-  <div class="tutorialStep" id="tutorialSelect"><b class="tutorialTitle">① えらぶ</b><div class="tutorialGesture"><span class="gestureFinger">✊</span></div><b id="selectInstruction">つかんで運ぶ</b><br><span id="selectSub">ランチャーへ置く</span></div>
+  <div class="tutorialStep" id="tutorialSelect"><b class="tutorialTitle">① えらぶ</b><div class="tutorialGesture"><span class="gestureFinger">✊</span></div><b id="selectInstruction">つかんで運ぶ</b><br><span id="selectSub">したの◯へ</span></div>
   <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">② ねらう</b><div class="tutorialGesture"><span class="gestureArrow" id="aimGestureArrow">↓</span><span class="gestureFinger">👆</span></div><b id="aimInstruction">下へ引く</b><br><span id="aimSub">狙いを決める</span></div>
-  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="powerPad" id="powerPad"><div class="powerPadV"></div><div class="powerPadH"></div><div class="powerPadMarker" id="powerPadMarker"></div></div><div id="throwReadout">上=はやい / 横=カーブ</div></div>
+  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="throwRow"><div class="speedBar"><div class="speedBarFill" id="speedBarFill"></div></div><div class="throwCol"><div id="speedReadout" class="gaugeLabel">スピード</div><div class="curveBar"><div class="curveBarFill" id="curveBarFill"></div></div><div id="curveReadout" class="gaugeLabel">まっすぐ</div></div></div></div>
   </div>
 </div>
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
@@ -795,14 +795,18 @@ function renderHand() {
       e.preventDefault();
       if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
       game.carry = { index, character, x: e.clientX, y: e.clientY };
-      button.setPointerCapture?.(e.pointerId);
+      try { button.setPointerCapture?.(e.pointerId); } catch (_) {}
       const move = (ev) => { if (game.carry) { game.carry.x = ev.clientX; game.carry.y = ev.clientY; } };
-      const up = () => {
+      const up = (ev) => {
         button.removeEventListener("pointermove", move);
         button.removeEventListener("pointerup", up);
         button.removeEventListener("pointercancel", up);
+        const dropX = ev?.clientX ?? game.carry?.x, dropY = ev?.clientY ?? game.carry?.y;
         game.carry = null;
-        activateHandCard(index);
+        // 掴んで「下の◯(投球位置)」まで運んだときだけ置く/合体。タップだけでは置かない。
+        const ls = toScreen(launcherPos().x, launcherPos().y);
+        const dropRadius = Math.min(window.innerWidth, window.innerHeight) * 0.45;
+        if (Math.hypot(dropX - ls.x, dropY - ls.y) <= dropRadius) activateHandCard(index);
       };
       button.addEventListener("pointermove", move);
       button.addEventListener("pointerup", up);
@@ -908,7 +912,9 @@ function partContactProfile(piece, dirX, dirY) {
 /* ---------- サバイバル初期化 ---------- */
 function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
   const enemy = pickEnemyType(enemyIndex); // B対応:解禁済みタイプから割り当て(段階アンロック)
-  const spawnAngle = angle ?? (-Math.PI / 2 + game.enemySerial * 2.3999632297);
+  // 途中出現も、初期スポーンと同じ「向こう側=上側の半円(y<0)」からだけにする。
+  // 弧(左→上→右)を θ=π+t*π で辿り、両端の真横に寄りすぎないよう内側(0.1〜0.9)でランダム。
+  const spawnAngle = angle ?? (Math.PI + (0.1 + Math.random() * 0.8) * Math.PI);
   const p = createPiece(
     Math.cos(spawnAngle) * CONFIG.ENEMY_SPAWN_RADIUS,
     Math.sin(spawnAngle) * CONFIG.ENEMY_SPAWN_RADIUS,
@@ -1208,7 +1214,7 @@ function updateThrowTutorial() {
   const selectSub = document.getElementById("selectSub");
   if (!staged) {
     if (selectInstruction) selectInstruction.textContent = "つかんで運ぶ";
-    if (selectSub) selectSub.textContent = "ランチャーへ置く";
+    if (selectSub) selectSub.textContent = "したの◯へ";
   } else if (game.stagedEvolved) {
     if (selectInstruction) selectInstruction.textContent = "合体ずみ ★";
     if (selectSub) selectSub.textContent = "パワーアップ！";
@@ -1228,26 +1234,23 @@ function updateThrowTutorial() {
   if (aimInstruction) aimInstruction.textContent = adjusting ? "離して決定" : "下へ引く";
   if (aimSub) aimSub.textContent = adjusting ? "ここで指を離す" : "狙いを決める";
 
-  // ③ なげる:縦=スピード / 横=カーブ を一体パッドで表示。押し量と横ズレをマーカー位置に反映。
+  // ③ なげる:縦=スピードバー(下から満ちる)/ 横=カーブバー(中央基準)。押し量・横ズレをバーに反映。
   throwStep?.classList.toggle("active", launching);
   const coef = a?.mode === "launch" ? pushCoef(a.pushDist) : CONFIG.PUSH_MIN_COEF;
   const power = clamp((coef - CONFIG.PUSH_MIN_COEF) / (1 - CONFIG.PUSH_MIN_COEF), 0, 1);
   const curve = a?.mode === "launch" ? lateralCurveAt(a, a.fx, a.fy) : 0;
-  const marker = document.getElementById("powerPadMarker");
-  if (marker) {
-    marker.style.top = `${(1 - power) * 100}%`;
-    marker.style.left = `${clamp(50 + curve * 50, 4, 96)}%`;
+  const speedFill = document.getElementById("speedBarFill");
+  if (speedFill) speedFill.style.height = `${Math.round(power * 100)}%`;
+  const curveFill = document.getElementById("curveBarFill");
+  if (curveFill) {
+    const extent = Math.round(Math.abs(curve) * 50);
+    curveFill.style.width = `${extent}%`;
+    curveFill.style.left = curve < 0 ? `${50 - extent}%` : "50%";
   }
-  const readout = document.getElementById("throwReadout");
-  if (readout) {
-    if (!launching) {
-      readout.textContent = "上=はやい / 横=カーブ";
-    } else {
-      const spd = power > 0.72 ? "はやい" : power > 0.35 ? "ふつう" : "おそい";
-      const dir = Math.abs(curve) < 0.12 ? "まっすぐ" : curve < 0 ? "左カーブ" : "右カーブ";
-      readout.textContent = `${spd} / ${dir}`;
-    }
-  }
+  const speedText = document.getElementById("speedReadout");
+  if (speedText) speedText.textContent = !launching ? "スピード" : power > 0.72 ? "はやい！" : power > 0.35 ? "ふつう" : "おそい";
+  const curveText = document.getElementById("curveReadout");
+  if (curveText) curveText.textContent = Math.abs(curve) < 0.12 ? "まっすぐ" : curve < 0 ? "← 左カーブ" : "右カーブ →";
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
@@ -1934,8 +1937,9 @@ function physicsStep() {
         const nx = dx / dist, ny = dy / dist;
         const profileA = partContactProfile(a, nx, ny);
         const profileB = partContactProfile(b, -nx, -ny);
-        const enemyAdvancePair = game.phase === "enemyMoving" && a.role === "enemy" && b.role === "enemy";
-        const minDist = (profileA.radius + profileB.radius) * (enemyAdvancePair ? (2 / 3) : 1);
+        // A4対応:従来は敵の接近中(enemyMoving)だけ衝突距離を2/3に縮めて重なりを許容していたが、
+        // 「移動で石が重なる瞬間が多い。重ならずにぶつかるように」との指摘で、常に全径で分離する。
+        const minDist = profileA.radius + profileB.radius;
         if (dist >= minDist) continue;
 
         const overlap = minDist - dist;
