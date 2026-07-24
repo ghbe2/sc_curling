@@ -292,6 +292,7 @@
 <div id="scenarioBar">
   <button class="btn" id="howToBtn">遊び方</button>
   <button class="btn" id="characterBookBtn">キャラ性能</button>
+  <button class="btn" id="allOutBtn" aria-pressed="false">ぜんぶ出す OFF</button>
   <button class="btn" id="soundBtn" aria-pressed="true">🔊</button>
   <button class="btn" id="resetBtn">RE</button>
 </div>
@@ -374,6 +375,11 @@ const CONFIG = {
   WUYONG_BLAST_SPEED: 3.0,  // A対応:飛ばした先が遠くまで滑らないよう7.5→3.0(「ずらすくらい」に)
   JINA_PULL_RADIUS: 150,    // A対応:引き寄せすぎ→範囲185→150
   JINA_PULL_SPEED: 2.0,     // A対応:引き寄せすぎ→引力4.2→2.0
+  // B対応:段階アンロック。最初は味方4種・敵2種から始め、ターン経過で増やす(敵の方が速く増える)
+  ALLY_START_COUNT: 4,      // 味方の初期解禁数
+  ALLY_UNLOCK_EVERY: 2,     // 味方は何ターンごとに1種増えるか(4→12)
+  ENEMY_START_COUNT: 2,     // 敵の初期解禁数
+  ENEMY_UNLOCK_EVERY: 1,    // 敵は何ターンごとに1種増えるか(2→7、味方より速い)
   SCORE_WAVE_CLEAR: 2000,
   SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
@@ -607,6 +613,7 @@ const game = {
   enemySerial: 0,
   enemyPostMoveApplied: false,
   enemyAbilityContacts: new Set(),
+  allOutMode: false, // B対応:trueだと最初から味方12種・敵7種すべて出る(段階アンロックを無効化)
 };
 
 const ENEMIES = [
@@ -634,8 +641,37 @@ const CHARACTERS = [
   { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
 ];
 
+// B対応:段階アンロックの解禁順。最初の4種は挙動が分かりやすい基本キャラ
+// (マユゥ=標準、ミナリ=直進、アウネ=よく曲がる、モコクン=大型)。以降に衝突/能力系を追加。
+const CHARACTER_UNLOCK_ORDER = ["mayuu", "minari", "aune", "mokokun", "yuunarina", "belpet", "rako", "mizu", "pafu", "hiroibeo", "barni", "riu"];
+// 敵の解禁順。序盤はテイクを直接妨害しない動き系(ウーヨン=移動、ジーナ=引き寄せ)から。
+// アルバ(直接テイク無効)・マルガリティフェラ(レイズのみ)など妨害の強い敵は後半に。
+const ENEMY_UNLOCK_ORDER = ["wrath", "greed", "gluttony", "sloth", "envy", "pride", "lust"];
+
+function unlockedCount(startCount, every, total) {
+  return clamp(startCount + Math.floor((game.turn - 1) / every), startCount, total);
+}
+function unlockedCharacters() {
+  if (game.allOutMode) return CHARACTERS.slice();
+  const n = unlockedCount(CONFIG.ALLY_START_COUNT, CONFIG.ALLY_UNLOCK_EVERY, CHARACTERS.length);
+  const ids = new Set(CHARACTER_UNLOCK_ORDER.slice(0, n));
+  return CHARACTERS.filter(c => ids.has(c.id));
+}
+function unlockedEnemies() {
+  if (game.allOutMode) return ENEMIES.slice();
+  const n = unlockedCount(CONFIG.ENEMY_START_COUNT, CONFIG.ENEMY_UNLOCK_EVERY, ENEMIES.length);
+  const ids = new Set(ENEMY_UNLOCK_ORDER.slice(0, n));
+  return ENEMIES.filter(e => ids.has(e.id));
+}
+// 敵配置は常に7体。解禁済みタイプのプールをserialで巡回して割り当てる
+function pickEnemyType(serial) {
+  const pool = unlockedEnemies();
+  return pool[((serial % pool.length) + pool.length) % pool.length];
+}
+
 function randomCharacter() {
-  return CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
+  const pool = unlockedCharacters();
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function createInitialHand() {
@@ -775,7 +811,7 @@ function partContactProfile(piece, dirX, dirY) {
 
 /* ---------- サバイバル初期化 ---------- */
 function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
-  const enemy = ENEMIES[enemyIndex % ENEMIES.length];
+  const enemy = pickEnemyType(enemyIndex); // B対応:解禁済みタイプから割り当て(段階アンロック)
   const spawnAngle = angle ?? (-Math.PI / 2 + game.enemySerial * 2.3999632297);
   const p = createPiece(
     Math.cos(spawnAngle) * CONFIG.ENEMY_SPAWN_RADIUS,
@@ -949,6 +985,7 @@ function enemyTakeGuardMessage(enemy) {
 function buildSurvivalGame() {
   game.pieces = [];
   game.wave = 1;
+  game.turn = 1; // 段階アンロック判定より前に設定(spawnEnemyWaveがgame.turnを参照するため)
   game.enemySerial = 0;
   game.enemyPostMoveApplied = false;
   game.enemyAbilityContacts = new Set();
@@ -956,7 +993,6 @@ function buildSurvivalGame() {
   game.launcherReady = true;
   game.aim = null;
   game.lockedAim = null;
-  game.turn = 1;
   game.shotInProgress = false;
   game.pendingHandIndex = null;
   game.chainCountThisThrow = 0;
@@ -2792,6 +2828,28 @@ function bindResetButtons() {
   });
 }
 
+// B対応:全部出しモードのトグル。ONで段階アンロックを無効化し最初から全種出す。
+// 端末に設定を保存し、切り替え時はゲームを作り直す。
+function bindAllOutButton() {
+  const button = document.getElementById("allOutBtn");
+  if (!button) return;
+  const saved = localStorage.getItem("sc_allOut");
+  if (saved === "1") game.allOutMode = true;
+  const sync = () => {
+    button.textContent = game.allOutMode ? "ぜんぶ出す ON" : "ぜんぶ出す OFF";
+    button.setAttribute("aria-pressed", game.allOutMode ? "true" : "false");
+    button.classList.toggle("active", game.allOutMode);
+  };
+  sync();
+  button.addEventListener("pointerdown", (e) => {
+    e.stopPropagation(); e.preventDefault();
+    game.allOutMode = !game.allOutMode;
+    localStorage.setItem("sc_allOut", game.allOutMode ? "1" : "0");
+    sync();
+    buildSurvivalGame();
+  });
+}
+
 function bindFastForwardButton() {
   const button = document.getElementById("fastForwardBtn");
   const stop = () => {
@@ -3005,6 +3063,7 @@ bindUiSwap();
 bindHowTo();
 bindCharacterBook();
 bindSoundButton();
+bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
 buildSurvivalGame();
 window.addEventListener("touchstart", unlockAudio, { capture: true, passive: true });
 window.addEventListener("pointerdown", unlockAudio, { capture: true, passive: true });
