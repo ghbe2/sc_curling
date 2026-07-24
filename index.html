@@ -166,10 +166,12 @@
     100% { opacity: 0; transform: translateX(12px); }
   }
   #fastForwardBtn {
-    position: fixed; left: 50%; right: auto; top: calc(92% - 86px); bottom: auto; z-index: 3;
-    transform: translateX(-50%); width: 88px; height: 48px; padding: 6px 3px;
+    /* B対応:早送りボタンを目立たせる。位置を上へ(盤とランチャーの間の余白)、サイズを大きく */
+    position: fixed; left: 50%; right: auto; top: 60%; bottom: auto; z-index: 3;
+    transform: translateX(-50%); width: 150px; height: 60px; padding: 6px 3px;
     color: #e91e63; background: rgba(255,255,255,0.97);
-    border-color: #f48fb1; font-size: 12px; font-weight: 700;
+    border-color: #f48fb1; font-size: 17px; font-weight: 800;
+    box-shadow: 0 4px 14px rgba(233,30,99,0.28);
     touch-action: none;
   }
   #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
@@ -307,7 +309,7 @@
     <div class="characterBookPager"><button class="btn" id="characterBookPrev">まえ</button><span id="characterBookPageLabel">味方 1 / 2</span><button class="btn" id="characterBookNext">つぎ</button></div>
   </div>
 </div>
-<button class="btn" id="fastForwardBtn">はやく♡</button>
+<button class="btn" id="fastForwardBtn">はやおくり</button>
 <div id="throwTutorial">
   <div id="tutorialControls"><button id="tutorialToggle" type="button" aria-expanded="true">かくす</button><button id="swapUiBtn" type="button">いれかえ</button></div>
   <div class="tutorialBody">
@@ -369,9 +371,9 @@ const CONFIG = {
   RIU_SILENCE_RADIUS: 130,
   WUYONG_MOVE_MULT: 1.55,
   WUYONG_BLAST_RADIUS: 92,
-  WUYONG_BLAST_SPEED: 7.5,
-  JINA_PULL_RADIUS: 185,
-  JINA_PULL_SPEED: 4.2,
+  WUYONG_BLAST_SPEED: 3.0,  // A対応:飛ばした先が遠くまで滑らないよう7.5→3.0(「ずらすくらい」に)
+  JINA_PULL_RADIUS: 150,    // A対応:引き寄せすぎ→範囲185→150
+  JINA_PULL_SPEED: 2.0,     // A対応:引き寄せすぎ→引力4.2→2.0
   SCORE_WAVE_CLEAR: 2000,
   SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
@@ -784,8 +786,14 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
 }
 
 function spawnEnemyWave() {
-  for (let i = 0; i < ENEMIES.length; i++) {
-    const angle = -Math.PI / 2 + (Math.PI * 2 * i) / ENEMIES.length;
+  // A対応:円周均等ではなく「向こう側(プレイヤーの反対=画面上側の半円)」に7体を並べる。
+  // ランチャーは画面下(world yが正)にあるので、y<0側=上半分に配置する。
+  // 半円の弧(左→上→右)を θ=π+t*π で辿り、両端の真横に寄りすぎないよう t=(i+0.5)/N で内側に振る。
+  // 最初は吹っ飛ばしやすく、ブランク(全滅)後の再配置でも同じ半円にする(ブランクボーナス的な価値)。
+  const N = ENEMIES.length;
+  for (let i = 0; i < N; i++) {
+    const t = (i + 0.5) / N;
+    const angle = Math.PI + t * Math.PI;
     spawnEnemy(i, angle);
   }
 }
@@ -1498,9 +1506,11 @@ function showGameOver(enemy) {
   game.phase = "gameOver";
   game.launcherReady = false;
   game.aim = null;
-  const name = enemy?.enemyName ?? "七つの大罪";
   const score = calculateScore();
-  document.getElementById("gameOverText").textContent = `${name}が中心に居座った　到達ターン ${game.turn}　SCORE ${score.total}`;
+  // A対応:「〇〇が居座った」の説明文は不要。スコア(と到達ターン)を主役にする
+  document.getElementById("gameOverText").innerHTML =
+    `<div style="font-size:26px;font-weight:800;opacity:1;color:#ffe36e;margin-bottom:4px;">SCORE ${score.total}</div>` +
+    `<div style="font-size:13px;opacity:0.85;">到達ターン ${game.turn}</div>`;
   document.getElementById("gameOver").classList.add("show");
   renderHand();
 }
@@ -2706,6 +2716,11 @@ function updateHUD() {
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("totalScoreText").textContent = score.total;
+  // B対応:経過ターン(とウェーブ)を毎回反映(従来はHTMLに枠だけあり「1」固定だった)
+  const turnEl = document.getElementById("turnText");
+  if (turnEl) turnEl.textContent = game.turn;
+  const waveEl = document.getElementById("waveText");
+  if (waveEl) waveEl.textContent = game.wave;
 }
 
 /* ---------- 入力 ---------- */
