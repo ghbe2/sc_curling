@@ -375,11 +375,13 @@ const CONFIG = {
   WUYONG_BLAST_SPEED: 3.0,  // A対応:飛ばした先が遠くまで滑らないよう7.5→3.0(「ずらすくらい」に)
   JINA_PULL_RADIUS: 150,    // A対応:引き寄せすぎ→範囲185→150
   JINA_PULL_SPEED: 2.0,     // A対応:引き寄せすぎ→引力4.2→2.0
-  // B対応:段階アンロック。最初は味方4種・敵2種から始め、ターン経過で増やす(敵の方が速く増える)
-  ALLY_START_COUNT: 4,      // 味方の初期解禁数
-  ALLY_UNLOCK_EVERY: 2,     // 味方は何ターンごとに1種増えるか(4→12)
-  ENEMY_START_COUNT: 2,     // 敵の初期解禁数
-  ENEMY_UNLOCK_EVERY: 1,    // 敵は何ターンごとに1種増えるか(2→7、味方より速い)
+  // 段階アンロック(ユーザー指定)。解禁される種類はゲーム開始時にランダムな順で決まる。
+  ALLY_START_COUNT: 4,      // 味方の初期解禁数(ミナリ/アウネ/ユゥナリナ/マユゥ)
+  ALLY_UNLOCK_EVERY: 12,    // 味方は何ターンごとに増えるか
+  ALLY_UNLOCK_STEP: 2,      // 味方は1回に何種増えるか(12ターンごとに2種)
+  ENEMY_START_COUNT: 3,     // 敵の初期解禁数=初期配置数(マルガリティフェラ/アルバ/ウェンカ)
+  ENEMY_UNLOCK_EVERY: 10,   // 敵は何ターンごとに増えるか
+  ENEMY_UNLOCK_STEP: 1,     // 敵は1回に何種増えるか(10ターンごとに1種)
   SCORE_WAVE_CLEAR: 2000,
   SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
@@ -418,9 +420,9 @@ const CONFIG = {
    *  ・回頭 = CURVE_STRENGTH × curve × 速度効き(直進化の抑制項は廃止、curveに単純比例)
    *  ・摩擦は回転量によらず一定(FRICTIONのみ。PROTO23でSPIN_GLIDEを廃止、下記参照)
    * --- */
-  CURVE_STRENGTH: 0.010, // 引き継ぎ再調整:0.042は低速でカーブが暴走(直進でも横200px超・ループ=モンスト化)
-                          // していたため0.010へ。逆式(bendFromSpin)は維持。CURVE_MAX_ANGLEの引き下げと
-                          // あわせ、低速でも盤外へ逸れず、テイク(高速)でも曲がるバランスにした
+  CURVE_STRENGTH: 0.016, // 「アウネくらい曲がるのがカーリングっぽい」との指摘で、旧アウネ相当(0.010×1.6)を
+                          // ベースに採用。0.010→0.016。逆式(bendFromSpin)維持。直進でも横56〜70px(約1.5マス)
+                          // 曲がり、テイク(高速)でも曲がる。距離目標(0%手前/50%中央/100%貫通)は維持を確認済み
   CURVE_VREF: 8,         // 回頭の速度依存の基準(px/frame)。効き = (VREF/(VREF+速度))^CURVE_SLOW_POWER
   CURVE_SLOW_POWER: 1.3, // 引き継ぎ再調整:2.4→1.3。2.4だと速度依存が強すぎ、テイク(高速)でほぼ曲がらず
                           // 「真っ直ぐテイクでも曲がらない=回転やミナリの意味がない」状態だった。
@@ -632,7 +634,7 @@ const CHARACTERS = [
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "当たると急停止", mods: { selfStopMult: 0.15 } },
   { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "敵能力を無視してヒット", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "周囲の敵能力を封印", mods: { silenceEnemyAbilities: true } },
-  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "すっごく曲がる", mods: { pathCurveMult: 1.6 } },
+  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "よく曲がる", mods: { pathCurveMult: 1.0 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの敵を強く引く", mods: { enemyAttractor: true } },
   { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "味方に弱・敵に特強", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "決めると得点 2倍", mods: { scoreMult: 2 } },
@@ -641,29 +643,44 @@ const CHARACTERS = [
   { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
 ];
 
-// B対応:段階アンロックの解禁順。最初の4種は挙動が分かりやすい基本キャラ
-// (マユゥ=標準、ミナリ=直進、アウネ=よく曲がる、モコクン=大型)。以降に衝突/能力系を追加。
-const CHARACTER_UNLOCK_ORDER = ["mayuu", "minari", "aune", "mokokun", "yuunarina", "belpet", "rako", "mizu", "pafu", "hiroibeo", "barni", "riu"];
-// 敵の解禁順。序盤はテイクを直接妨害しない動き系(ウーヨン=移動、ジーナ=引き寄せ)から。
-// アルバ(直接テイク無効)・マルガリティフェラ(レイズのみ)など妨害の強い敵は後半に。
-const ENEMY_UNLOCK_ORDER = ["wrath", "greed", "gluttony", "sloth", "envy", "pride", "lust"];
+// 段階アンロック(ユーザー指定):最初は固定の基本キャラ、以降はランダムな順で解禁。
+const CHARACTER_STARTERS = ["minari", "aune", "yuunarina", "mayuu"]; // 味方の初期4種
+const ENEMY_STARTERS = ["lust", "pride", "sloth"]; // 敵の初期3種=マルガリティフェラ/アルバ/ウェンカ
 
-function unlockedCount(startCount, every, total) {
-  return clamp(startCount + Math.floor((game.turn - 1) / every), startCount, total);
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+// ゲーム開始時に、starterの後ろへ残りをシャッフルして並べた解禁順を作る(buildSurvivalGameで呼ぶ)
+function buildUnlockSequences() {
+  const allyRest = shuffleArray(CHARACTERS.map(c => c.id).filter(id => !CHARACTER_STARTERS.includes(id)));
+  game.allyUnlockSeq = [...CHARACTER_STARTERS, ...allyRest];
+  const enemyRest = shuffleArray(ENEMIES.map(e => e.id).filter(id => !ENEMY_STARTERS.includes(id)));
+  game.enemyUnlockSeq = [...ENEMY_STARTERS, ...enemyRest];
+}
+function unlockedCharacterCount() {
+  if (game.allOutMode) return CHARACTERS.length;
+  return clamp(CONFIG.ALLY_START_COUNT + CONFIG.ALLY_UNLOCK_STEP * Math.floor((game.turn - 1) / CONFIG.ALLY_UNLOCK_EVERY), CONFIG.ALLY_START_COUNT, CHARACTERS.length);
+}
+function unlockedEnemyCount() {
+  if (game.allOutMode) return ENEMIES.length;
+  return clamp(CONFIG.ENEMY_START_COUNT + CONFIG.ENEMY_UNLOCK_STEP * Math.floor((game.turn - 1) / CONFIG.ENEMY_UNLOCK_EVERY), CONFIG.ENEMY_START_COUNT, ENEMIES.length);
 }
 function unlockedCharacters() {
-  if (game.allOutMode) return CHARACTERS.slice();
-  const n = unlockedCount(CONFIG.ALLY_START_COUNT, CONFIG.ALLY_UNLOCK_EVERY, CHARACTERS.length);
-  const ids = new Set(CHARACTER_UNLOCK_ORDER.slice(0, n));
+  const seq = game.allyUnlockSeq || CHARACTER_STARTERS;
+  const ids = new Set(seq.slice(0, unlockedCharacterCount()));
   return CHARACTERS.filter(c => ids.has(c.id));
 }
 function unlockedEnemies() {
-  if (game.allOutMode) return ENEMIES.slice();
-  const n = unlockedCount(CONFIG.ENEMY_START_COUNT, CONFIG.ENEMY_UNLOCK_EVERY, ENEMIES.length);
-  const ids = new Set(ENEMY_UNLOCK_ORDER.slice(0, n));
+  const seq = game.enemyUnlockSeq || ENEMY_STARTERS;
+  const ids = new Set(seq.slice(0, unlockedEnemyCount()));
   return ENEMIES.filter(e => ids.has(e.id));
 }
-// 敵配置は常に7体。解禁済みタイプのプールをserialで巡回して割り当てる
+// 敵配置は解禁済みタイプのプールをserialで巡回して割り当てる(初期は各タイプ1体ずつ)
 function pickEnemyType(serial) {
   const pool = unlockedEnemies();
   return pool[((serial % pool.length) + pool.length) % pool.length];
@@ -833,11 +850,11 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
 }
 
 function spawnEnemyWave() {
-  // A対応:円周均等ではなく「向こう側(プレイヤーの反対=画面上側の半円)」に7体を並べる。
-  // ランチャーは画面下(world yが正)にあるので、y<0側=上半分に配置する。
-  // 半円の弧(左→上→右)を θ=π+t*π で辿り、両端の真横に寄りすぎないよう t=(i+0.5)/N で内側に振る。
-  // 最初は吹っ飛ばしやすく、ブランク(全滅)後の再配置でも同じ半円にする(ブランクボーナス的な価値)。
-  const N = ENEMIES.length;
+  // 「向こう側(プレイヤーの反対=画面上側の半円)」に、現在の解禁タイプ数だけ並べる。
+  // 初期は3体、10ターンごとに1体ずつ増える。ブランク(全滅)再配置でも現在の解禁数で並べる。
+  // ランチャーは画面下(world yが正)なのでy<0側=上半分。半円の弧(左→上→右)を θ=π+t*π で辿り、
+  // 両端の真横に寄りすぎないよう t=(i+0.5)/N で内側に振る。各タイプ1体ずつ配置される。
+  const N = unlockedEnemies().length;
   for (let i = 0; i < N; i++) {
     const t = (i + 0.5) / N;
     const angle = Math.PI + t * Math.PI;
@@ -989,6 +1006,7 @@ function buildSurvivalGame() {
   game.enemySerial = 0;
   game.enemyPostMoveApplied = false;
   game.enemyAbilityContacts = new Set();
+  buildUnlockSequences(); // このゲームの解禁順(starter+残りシャッフル)を決める
   spawnEnemyWave();
   game.launcherReady = true;
   game.aim = null;
