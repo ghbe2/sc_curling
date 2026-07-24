@@ -695,7 +695,11 @@ function randomCharacter() {
 }
 
 function createInitialHand() {
-  game.hand = Array.from({ length: 4 }, randomCharacter);
+  // ゲーム開始時の手札4枚は、解禁済みの4種を1枚ずつ必ず出す(重複なし・順はシャッフル)。
+  // 以降の補充はrandomCharacter(解禁プールからランダム)。
+  const starters = unlockedCharacters().slice(0, 4);
+  game.hand = shuffleArray(starters);
+  while (game.hand.length < 4) game.hand.push(randomCharacter());
   game.selectedHandIndex = null;
   game.pendingHandIndex = null;
   game.refillHandIndex = null;
@@ -1104,7 +1108,8 @@ function startAim(pointerId, px0, py0) {
 }
 
 function updateSideInfoVisibility() {
-  document.getElementById("sideInfo")?.classList.toggle("hidden", game.aim !== null);
+  // スコア/ターン(sideInfo)は狙い操作中も消さない(消えると見えないとの指摘)。常時表示。
+  document.getElementById("sideInfo")?.classList.remove("hidden");
   document.getElementById("fastForwardBtn")?.classList.toggle("hidden", game.aim !== null || game.phase === "aim");
 }
 
