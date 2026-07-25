@@ -65,24 +65,24 @@
   }
   #handBar.refilling { animation: trayBump 0.38s ease-out; }
   #handBar.hidden { opacity: 0; pointer-events: none; transform: translateX(18px); }
+  /* 手札はボール(石)そのものの見た目に:掴むイメージが湧くように。名前/特性の文字は出さない */
   .handCard {
-    min-height: 0; padding: 3px 2px;
-    border: 1px solid rgba(244,143,177,0.7); border-radius: 9px;
-    color: #2b1f24; background: rgba(255,255,255,0.74);
-    font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.2;
+    position: relative; height: 100%; aspect-ratio: 1 / 1; margin: 0 auto; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px solid var(--ball-color, #f48fb1); border-radius: 50%;
+    color: #2b1f24;
+    background: radial-gradient(circle at 36% 30%, #ffffff, rgba(255,255,255,0.9) 55%, rgba(255,255,255,0.78));
+    box-shadow: 0 3px 9px rgba(80,30,50,0.18);
     touch-action: manipulation;
   }
-  .handCard .icon { display: block; font-size: 17px; margin-bottom: 2px; }
-  .handCard .trait { display: block; font-size: 8px; opacity: 0.62; margin-top: 2px; }
-  .handCard { position: relative; }
+  .handCard .icon { display: block; font-size: 26px; line-height: 1; }
   .handCard .evolvedBadge {
-    position: absolute; top: -6px; right: -4px; font-size: 13px;
+    position: absolute; top: -3px; right: -3px; font-size: 14px;
     color: #ffcf33; text-shadow: 0 0 4px rgba(255,180,0,0.9), 0 1px 2px rgba(120,60,0,0.5);
     animation: selectedFloat 0.9s ease-in-out infinite alternate;
   }
   .handCard.selected {
-    border-color: #e91e63; background: #fff0f5;
-    box-shadow: 0 0 0 2px rgba(233,30,99,0.2), 0 5px 16px rgba(80,30,50,0.16);
+    box-shadow: 0 0 0 3px rgba(233,30,99,0.35), 0 5px 16px rgba(80,30,50,0.2);
     animation: selectedFloat 1.25s ease-in-out infinite alternate;
   }
   .handCard.entering { animation: cardRefill 0.46s cubic-bezier(.2,1.45,.45,1); }
@@ -131,6 +131,21 @@
   }
   #dangerAlert .dangerSub { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0; }
   @keyframes pinchPulse { from { transform: translateX(-50%) scale(0.96); } to { transform: translateX(-50%) scale(1.05); } }
+  /* 能力説明:置いた石/タップした敵の能力を画面中央に出す */
+  #abilityInfo {
+    position: fixed; left: 50%; top: 42%; z-index: 9;
+    transform: translate(-50%, -50%) scale(0.9);
+    max-width: 78vw; padding: 12px 18px; border-radius: 16px;
+    background: rgba(255,255,255,0.96); color: #4a2133;
+    border: 3px solid #f48fb1; box-shadow: 0 8px 26px rgba(80,30,50,0.28);
+    font-family: 'DotGothic16', system-ui, sans-serif; text-align: center; pointer-events: none;
+    opacity: 0; transition: opacity 0.18s, transform 0.18s;
+  }
+  #abilityInfo.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #abilityInfo.enemy { color: #ffe1ea; background: rgba(28,20,32,0.96); border-color: #ff6e9e; }
+  #abilityInfo .abilityIcon { font-size: 34px; line-height: 1; }
+  #abilityInfo .abilityName { font-size: 17px; font-weight: 900; margin-top: 4px; }
+  #abilityInfo .abilityTrait { font-size: 13px; margin-top: 4px; opacity: 0.92; }
   #hint {
     display: none;
   }
@@ -318,6 +333,7 @@
 </div>
 <div id="chainToast"></div>
 <div id="dangerAlert" aria-live="polite"></div>
+<div id="abilityInfo" aria-live="polite"></div>
 <div id="scenarioBar">
   <button class="btn" id="howToBtn">遊び方</button>
   <button class="btn" id="characterBookBtn">キャラ性能</button>
@@ -767,14 +783,33 @@ function activateHandCard(index) {
     game.refillHandIndex = index;
     addImpactFx(launcherPos().x, launcherPos().y, 3.2, false);
     playUiPopSound(360, 0.05);
+    const s = game.hand[staged];
+    if (s) showAbilityInfo(s.icon, `${s.name} ★合体`, s.trait, false);
   } else {
     // 置く(選択)。別の石に持ち替えたら進化はリセット。
     game.selectedHandIndex = index;
     game.stagedEvolved = false;
     game.refillHandIndex = null;
     playUiPopSound(230, 0.045);
+    // ソケットはボール表示で説明の場所がないので、置いたときに画面中央へ能力を出す。
+    showAbilityInfo(thisChar.icon, thisChar.name, thisChar.trait, false);
   }
   renderHand();
+}
+
+// 能力説明を画面中央に表示(置いた石/タップした敵)。数秒で自動的に消える。
+let abilityInfoTimer = null;
+function showAbilityInfo(icon, name, trait, isEnemy) {
+  const el = document.getElementById("abilityInfo");
+  if (!el) return;
+  el.className = "show" + (isEnemy ? " enemy" : "");
+  el.innerHTML = `<div class="abilityIcon">${icon ?? ""}</div><div class="abilityName">${name ?? ""}</div><div class="abilityTrait">${trait ?? ""}</div>`;
+  if (abilityInfoTimer) clearTimeout(abilityInfoTimer);
+  abilityInfoTimer = setTimeout(hideAbilityInfo, 2600);
+}
+function hideAbilityInfo() {
+  document.getElementById("abilityInfo")?.classList.remove("show");
+  if (abilityInfoTimer) { clearTimeout(abilityInfoTimer); abilityInfoTimer = null; }
 }
 
 function renderHand() {
@@ -797,8 +832,10 @@ function renderHand() {
     button.dataset.partType = character.mods.partType ?? "none";
     button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
     const evolvedBadge = (index === game.selectedHandIndex && game.stagedEvolved) ? `<span class="evolvedBadge">★</span>` : "";
-    button.innerHTML = `<span class="icon">${character.icon}</span>${character.name}<span class="trait">${character.trait}</span>${evolvedBadge}`;
-    button.style.borderBottomColor = character.color;
+    // ボール(石)の見た目:アイコンのみ。名前・特性はここには出さず、置いたとき画面中央に出す。
+    button.innerHTML = `<span class="icon">${character.icon}</span>${evolvedBadge}`;
+    button.setAttribute("aria-label", `${character.name}（${character.trait}）`);
+    button.style.setProperty("--ball-color", character.color);
     // 掴んで運ぶ:pointerdownで運搬開始、pointerupで「置く/合体」を判定(タップでも同ロジックで動く)
     button.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
@@ -1192,7 +1229,21 @@ function startAim(pointerId, px0, py0) {
     pushDist: 0,       // 押し出し距離(瞬間値。フリックの後方ぶれで一時的に縮むことがある)
     peakPush: 0,       // 押し出しの最大到達値(パワー計算・投擲判定はこちらを使う)
   };
+  hideAbilityInfo(); // 狙い始めたら能力説明を消す
   updateSideInfoVisibility();
+}
+
+// 画面座標(sx,sy)にある敵ピースを返す(なければnull)。敵タップの能力表示用。
+function enemyAt(sx, sy) {
+  let best = null, bestD = Infinity;
+  for (const p of game.pieces) {
+    if (p.role !== "enemy" || p.state !== "onboard") continue;
+    const s = toScreen(p.x, p.y);
+    const r = pieceRadius(p) * view.scale;
+    const d = Math.hypot(sx - s.x, sy - s.y);
+    if (d <= r + 10 && d < bestD) { best = p; bestD = d; }
+  }
+  return best;
 }
 
 function updateSideInfoVisibility() {
@@ -2936,7 +2987,15 @@ function updateHUD() {
 /* ---------- 入力 ---------- */
 window.addEventListener("pointerdown", (e) => {
   if (e.target.closest("#scenarioBar") || e.target.closest("#handBar") || e.target.closest("#sideInfo") || e.target.closest("#throwTutorial")) return;
-  if (game.aim !== null || !game.launcherReady || game.phase !== "aim" || game.gameOver || game.selectedHandIndex === null) return;
+  if (game.phase !== "aim" || game.gameOver) return;
+  // 敵をタップしたら能力説明を出す(石を置いていなくても確認できる)。敵の上からは照準を始めない。
+  const enemy = enemyAt(e.clientX, e.clientY);
+  if (enemy) {
+    const meta = ENEMIES.find((en) => en.id === enemy.enemyId);
+    showAbilityInfo(enemy.enemyIcon ?? enemy.icon, enemy.enemyName ?? meta?.name ?? "敵", meta?.trait ?? "", true);
+    return;
+  }
+  if (game.aim !== null || !game.launcherReady || game.selectedHandIndex === null) return;
   e.preventDefault();
   startAim(e.pointerId, e.clientX, e.clientY);
 }, { passive: false });
