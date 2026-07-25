@@ -216,15 +216,25 @@
   .tutorialFill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg,#81d4fa,#ff4081); transition: width 0.05s; }
   #spinMeter { position: relative; overflow: visible; }
   #spinMeter::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 11px; background: #4a2133; transform: translateX(-1px); }
-  /* ③なげる:縦=スピードバー(下から満ちる=強さ) / 横=カーブバー(中央基準) */
-  .throwRow { display: flex; gap: 8px; align-items: flex-end; margin-top: 3px; }
-  .speedBar { position: relative; width: 15px; height: 46px; border-radius: 8px; background: #f4dce5; overflow: hidden; flex: 0 0 auto; }
-  .speedBarFill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; background: linear-gradient(0deg,#81d4fa,#ff4081); transition: height 0.05s; }
-  .throwCol { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .gaugeLabel { font-size: 9px; text-align: center; }
-  .curveBar { position: relative; height: 8px; border-radius: 8px; background: #f4dce5; }
-  .curveBar::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 12px; background: #4a2133; transform: translateX(-1px); }
-  .curveBarFill { position: absolute; top: 0; bottom: 0; width: 0%; left: 50%; background: #ff4081; border-radius: 5px; transition: width 0.05s, left 0.05s; }
+  /* ③なげる:スピード/カーブを各行「名前 | バー | 値」で表示(ラベルの取り違えを防ぐ) */
+  .gauge2 { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+  .gaugeName { font-size: 9px; width: 42px; flex: 0 0 auto; text-align: right; opacity: 0.85; }
+  .gaugeVal { font-size: 9px; width: 60px; flex: 0 0 auto; text-align: left; color: #e91e63; }
+  .bar2 { position: relative; flex: 1 1 auto; height: 9px; border-radius: 8px; background: #f4dce5; overflow: hidden; min-width: 0; }
+  .fill2 { position: absolute; top: 0; bottom: 0; left: 0; width: 0%; background: linear-gradient(90deg,#81d4fa,#ff4081); transition: width 0.05s; }
+  .curveBar { overflow: visible; }
+  .curveBar::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 13px; background: #4a2133; transform: translateX(-1px); }
+  .curveFill { left: 50%; background: #ff4081; border-radius: 5px; transition: width 0.05s, left 0.05s; }
+  /* ①えらぶ:珠を掴んで中央へ運ぶアニメ */
+  .selectAnim { position: relative; height: 34px; margin: 2px 0; }
+  .selectBall { position: absolute; top: 8px; left: 50%; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff, #ffa6cb 58%, #e91e63); box-shadow: 0 2px 5px rgba(120,30,60,0.3);
+    animation: grabToCenter 1.8s ease-in-out infinite; }
+  @keyframes grabToCenter {
+    0%, 10% { transform: translate(21px, -3px) scale(0.82); }
+    24% { transform: translate(21px, 0) scale(1.14); }
+    66% { transform: translate(0, 0) scale(1); }
+    88%, 100% { transform: translate(0, 0) scale(1); } }
   #spinFill { position: absolute; left: 50%; width: 0; background: #ff4081; transition: width 0.05s, left 0.05s; }
   #spinReadout { text-align: center; margin-top: 3px; min-height: 14px; }
   body.ui-swapped #handBar { left: 7px; right: auto; }
@@ -332,9 +342,9 @@
 <div id="throwTutorial">
   <div id="tutorialControls"><button id="tutorialToggle" type="button" aria-expanded="true">かくす</button><button id="swapUiBtn" type="button">いれかえ</button></div>
   <div class="tutorialBody">
-  <div class="tutorialStep" id="tutorialSelect"><b class="tutorialTitle">① えらぶ</b><div class="tutorialGesture"><span class="gestureFinger">✊</span></div><b id="selectInstruction">つかんで運ぶ</b><br><span id="selectSub">したの◯へ</span></div>
+  <div class="tutorialStep" id="tutorialSelect"><b class="tutorialTitle">① えらぶ</b><div class="selectAnim"><span class="selectBall"></span></div><b id="selectInstruction">つかんで運ぶ</b><br><span id="selectSub">したの◯へ</span></div>
   <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">② ねらう</b><div class="tutorialGesture"><span class="gestureArrow" id="aimGestureArrow">↓</span><span class="gestureFinger">👆</span></div><b id="aimInstruction">下へ引く</b><br><span id="aimSub">狙いを決める</span></div>
-  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="throwRow"><div class="speedBar"><div class="speedBarFill" id="speedBarFill"></div></div><div class="throwCol"><div id="speedReadout" class="gaugeLabel">スピード</div><div class="curveBar"><div class="curveBarFill" id="curveBarFill"></div></div><div id="curveReadout" class="gaugeLabel">まっすぐ</div></div></div></div>
+  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="gauge2"><span class="gaugeName">スピード</span><div class="bar2"><div class="fill2" id="speedBarFill"></div></div><span class="gaugeVal" id="speedReadout">―</span></div><div class="gauge2"><span class="gaugeName">カーブ</span><div class="bar2 curveBar"><div class="fill2 curveFill" id="curveBarFill"></div></div><span class="gaugeVal" id="curveReadout">まがりにくい</span></div></div>
   </div>
 </div>
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
@@ -1240,7 +1250,7 @@ function updateThrowTutorial() {
   const power = clamp((coef - CONFIG.PUSH_MIN_COEF) / (1 - CONFIG.PUSH_MIN_COEF), 0, 1);
   const curve = a?.mode === "launch" ? lateralCurveAt(a, a.fx, a.fy) : 0;
   const speedFill = document.getElementById("speedBarFill");
-  if (speedFill) speedFill.style.height = `${Math.round(power * 100)}%`;
+  if (speedFill) speedFill.style.width = `${Math.round(power * 100)}%`;
   const curveFill = document.getElementById("curveBarFill");
   if (curveFill) {
     const extent = Math.round(Math.abs(curve) * 50);
@@ -1248,9 +1258,11 @@ function updateThrowTutorial() {
     curveFill.style.left = curve < 0 ? `${50 - extent}%` : "50%";
   }
   const speedText = document.getElementById("speedReadout");
-  if (speedText) speedText.textContent = !launching ? "スピード" : power > 0.72 ? "はやい！" : power > 0.35 ? "ふつう" : "おそい";
+  if (speedText) speedText.textContent = !launching ? "―" : power > 0.72 ? "はやい！" : power > 0.35 ? "ふつう" : "おそい";
+  // カーブ表現:横ズレが大きい(強回転)ほど「まがりにくい」。中央ほど弱回転=よく曲がる。
+  // 曲がるときの向きは左右で示す(真ん中は「まっすぐ」ではないことに注意)。
   const curveText = document.getElementById("curveReadout");
-  if (curveText) curveText.textContent = Math.abs(curve) < 0.12 ? "まっすぐ" : curve < 0 ? "← 左カーブ" : "右カーブ →";
+  if (curveText) curveText.textContent = Math.abs(curve) >= 0.7 ? "まがりにくい" : curve < 0 ? "← 左にまがる" : "右に曲がる →";
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
