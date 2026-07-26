@@ -417,9 +417,7 @@ const CONFIG = {
   RIU_SILENCE_RADIUS: 130,
   WUYONG_MOVE_MULT: 1.55,
   WUYONG_BLAST_RADIUS: 92,
-  WUYONG_BLAST_SPEED: 3.0,  // A対応:飛ばした先が遠くまで滑らないよう7.5→3.0(「ずらすくらい」に)
-  JINA_PULL_RADIUS: 150,    // A対応:引き寄せすぎ→範囲185→150
-  JINA_PULL_SPEED: 2.0,     // A対応:引き寄せすぎ→引力4.2→2.0
+  WUYONG_BLAST_SPEED: 1.5,  // 弾く力をさらに弱く(3.0→1.5)。位置がわずかにズレる程度
   // 段階アンロック(ユーザー指定)。解禁される種類はゲーム開始時にランダムな順で決まる。
   ALLY_START_COUNT: 4,      // 味方の初期解禁数(ミナリ/アウネ/ユゥナリナ/マユゥ)
   ALLY_UNLOCK_EVERY: 12,    // 味方は何ターンごとに増えるか
@@ -668,43 +666,43 @@ const game = {
 const ENEMIES = [
   { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "味方接触で一度だけムイ生成" },
   { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "味方接触：小型・弱体化" },
-  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "直接テイクのみ有効" },
-  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "移動1.55倍・移動後に爆発" },
+  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い球ほど効かない／遅い球で動く" },
+  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "移動1.55倍・移動後に弱く弾く" },
   { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "レイズテイクのみ有効" },
-  { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "ジーナ=敵／マミ=味方を引く" },
+  { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "ジーナ=敵に強い／マミ=味方に強い" },
   { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵接触：大型・重量化" },
 ];
 
 const CHARACTERS = [
   { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "かなり直進", mods: { pathCurveMult: 0.15 } },
   { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "とても飛びづらい", mods: { knockResist: 0.22 } },
-  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "当たると急停止", mods: { selfStopMult: 0.15 } },
+  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "味方に当たると止まる", mods: { selfStopVsAlly: 0.15 } },
   { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "敵能力を無視してヒット", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "周囲の敵能力を封印", mods: { silenceEnemyAbilities: true } },
-  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "よく曲がる", mods: { pathCurveMult: 1.0 } },
+  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "とてもよく曲がる", mods: { pathCurveMult: 1.75, curveSpeedEase: 0.55 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの敵を強く引く", mods: { enemyAttractor: true } },
-  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "味方に弱・敵に特強", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4 } },
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に当たると止まる", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "決めると得点 2倍", mods: { scoreMult: 2 } },
   { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
   { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.3×", mods: { radiusScale: 1.3 } },
-  { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.35 } },
+  { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.22 } },
 ];
 
 // 合体進化(1段階のみ)。ランチャーに置いた石へ同じ石を重ねると、その石の効果が進化する。
 // ミナリ=小さくなる/ベルペット=大きくなる(ユーザー指定)。他は主効果を強化。throwPieceで適用。
 const EVOLVE_MODS = {
-  minari:    { radiusScale: 0.62 },              // 小さくなる(狙われにくい)
-  aune:      { pathCurveMult: 1.4 },             // もっと曲がる
-  yuunarina: { radiusScale: 0.6 },               // さらに小型(軌道予測は元から)
-  mayuu:     { scoreMult: 3 },                    // 得点倍率アップ
-  belpet:    { radiusScale: 1.5, knockResist: 0.12 }, // 大きくなる&もっと飛びづらい
-  rako:      { selfStopMult: 0.06 },             // さらに急停止
-  mokokun:   { radiusScale: 1.6 },               // さらに大型
-  mizu:      { restitution: 0.55 },              // さらに反発
-  pafu:      { allyKnockMult: 0.24, enemyKnockMult: 3.2 },
-  barni:     { radiusScale: 1.22 },
-  riu:       { radiusScale: 1.22 },
-  hiroibeo:  { radiusScale: 0.78 },
+  minari:    { pathCurveMult: 0.06, radiusScale: 0.62 }, // さらに曲がらず小さく(針の穴ショット)
+  aune:      { pathCurveMult: 2.6, radiusScale: 0.78 },  // さらに曲がって小さく
+  yuunarina: { guideDepth: 2 },                   // さらに1つ先の弾道まで予測
+  mayuu:     { scoreMult: 3 },                    // 得点3倍
+  belpet:    { restitution: 0.22 },               // 当たった石をぼよよん弾く(瑞珠の通常値ぶん)
+  rako:      { radiusScale: 1.2 },
+  mokokun:   { radiusScale: 1.5 },
+  mizu:      { restitution: 0.35 },               // もっとぼよよん
+  pafu:      { radiusScale: 1.2 },
+  barni:     { raiseIgnoresEnemyAbilities: true },// レイズテイクした石も敵能力を無視
+  riu:       { silenceRadiusMult: 1.6 },          // 封印範囲を拡大
+  hiroibeo:  { attractRangeMult: 1.7 },           // 引き寄せ範囲を拡大
 };
 
 // 段階アンロック(ユーザー指定):最初は固定の基本キャラ、以降はランダムな順で解禁。
@@ -918,9 +916,16 @@ function createPiece(x, y, role, character = null) {
     mods: {
       speedMult: 1,
       pathCurveMult: 1,
+      curveSpeedEase: 1,      // 1未満だと速度による曲がり抑制が弱まる(速い球でも曲がる。アウネ)
       knockResist: 1,
       selfStopMult: 1,
+      selfStopVsAlly: 1,      // 味方に当てたとき自分が止まりやすい(ラコ)
+      selfStopVsEnemy: 1,     // 敵に当てたとき自分が止まりやすい(ぱふ)
       restitution: 0,
+      silenceRadiusMult: 1,   // 敵能力の封印範囲の倍率(リウ進化)
+      attractRangeMult: 1,    // 敵の引き寄せ範囲の倍率(ヒロイベオ進化)
+      raiseIgnoresEnemyAbilities: false, // レイズテイクでも敵能力を無視(バーニ進化)
+      guideDepth: 1,          // 軌道予測で何段先まで見るか(ユゥナリナ進化で2)
       radiusScale: 1,
       trajectoryGuide: false,
       partType: null,
@@ -1030,12 +1035,14 @@ function enemyAbilitySuppressed(enemy) {
   if (!enemy || enemy.role !== "enemy") return false;
   return game.pieces.some(piece =>
     piece.role === "player" && piece.state === "onboard" && piece.mods.silenceEnemyAbilities &&
-    Math.hypot(piece.x - enemy.x, piece.y - enemy.y) <= CONFIG.RIU_SILENCE_RADIUS
+    Math.hypot(piece.x - enemy.x, piece.y - enemy.y) <= CONFIG.RIU_SILENCE_RADIUS * piece.mods.silenceRadiusMult
   );
 }
 
 function barniBypassesEnemy(attacker, target) {
-  return attacker?.role === "player" && attacker.mods.ignoreEnemyAbilities && target?.role === "enemy";
+  if (attacker?.role !== "player" || target?.role !== "enemy") return false;
+  // バーニ本体、またはバーニ進化に弾かれてレイズテイクに向かう石(inheritsIgnoreAbilities)
+  return Boolean(attacker.mods.ignoreEnemyAbilities || attacker.inheritsIgnoreAbilities);
 }
 
 function applyEnemyContactAbilities(a, b) {
@@ -1094,20 +1101,8 @@ function applyEnemyPostMoveAbilities() {
       }
       addImpactFx(enemy.x, enemy.y, 5.5, true);
     }
-    if (enemy.enemyId === "greed") {
-      const targetRole = enemy.ginaForm === "mami" ? "player" : "enemy";
-      for (const target of pieces) {
-        if (target.uid === enemy.uid || target.role !== targetRole) continue;
-        const dx = enemy.x - target.x, dy = enemy.y - target.y;
-        const distance = Math.hypot(dx, dy);
-        if (distance <= 0 || distance > CONFIG.JINA_PULL_RADIUS) continue;
-        const speed = CONFIG.JINA_PULL_SPEED * (1 - distance / CONFIG.JINA_PULL_RADIUS * 0.55);
-        target.vx += dx / distance * speed;
-        target.vy += dy / distance * speed;
-        moved = true;
-      }
-      addImpactFx(enemy.x, enemy.y, 3.4, false);
-    }
+    // ジーナ/マミの引き寄せは廃止。能力は「ジーナ=敵に飛ばされにくい/マミ=味方に飛ばされにくい」
+    // という被弾耐性へ変更したため、移動後の処理は不要(衝突処理側で判定する)。
   }
   if (moved) playUiPopSound(135, 0.06);
   return moved;
@@ -1128,7 +1123,7 @@ function toggleGinaForms() {
 function enemyTakeGuardMessage(enemy) {
   if (enemyAbilitySuppressed(enemy) || enemy.lastHitIgnoredAbilities) return "";
   if (enemy.enemyId === "pride" && enemy.lastTakeRoute !== "raise") return "れいずでねらって！";
-  if (enemy.enemyId === "lust" && enemy.lastTakeRoute !== "direct") return "ちょくせつねらって！";
+  if (enemy.enemyId === "lust") return "ゆっくりねらって！"; // 速い球ほど効かない
   return "";
 }
 
@@ -1502,6 +1497,7 @@ function throwPiece(params) {
     oldPiece.takeWasRaise = false;
     oldPiece.lastTakeRoute = null;
     oldPiece.lastHitIgnoredAbilities = false;
+    oldPiece.inheritsIgnoreAbilities = false;
   }
   const p = createPiece(launch.x, launch.y, "player", character);
   p.isCurrentShot = true;
@@ -1581,7 +1577,7 @@ function drawPredictedShotPath(aim, color) {
       const speed = Math.hypot(vx, vy);
       if (speed < CONFIG.SETTLE_SPEED) break;
       lastDirX = vx / speed; lastDirY = vy / speed;
-      const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
+      const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER * (mods.curveSpeedEase ?? 1));
       let dTheta = 0;
       if (Math.abs(turned) < CONFIG.CURVE_MAX_ANGLE) {
         dTheta = CONFIG.CURVE_STRENGTH * bendFromSpin(curve) * slow * dt * (mods.pathCurveMult ?? 1);
@@ -1767,7 +1763,7 @@ function startEnemyAdvance() {
     const speed = baseSpeed * (enemy === pressureEnemy ? CONFIG.ENEMY_PRESSURE_MULT : 1) * abilityMoveMult;
     let dirX = -enemy.x / distance;
     let dirY = -enemy.y / distance;
-    const localAttractors = attractors.filter(piece => Math.hypot(piece.x - enemy.x, piece.y - enemy.y) <= CONFIG.HIROIBEO_RANGE);
+    const localAttractors = attractors.filter(piece => Math.hypot(piece.x - enemy.x, piece.y - enemy.y) <= CONFIG.HIROIBEO_RANGE * piece.mods.attractRangeMult);
     if (localAttractors.length > 0) {
       const target = localAttractors.reduce((nearest, piece) =>
         Math.hypot(piece.x - enemy.x, piece.y - enemy.y) < Math.hypot(nearest.x - enemy.x, nearest.y - enemy.y)
@@ -1939,7 +1935,8 @@ function physicsStep() {
       if (speed < CONFIG.SETTLE_SPEED) { p.vx = 0; p.vy = 0; continue; }
 
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
-      const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER);
+      // curveSpeedEase<1 は速度による曲がり抑制を弱める(=速いショットでも曲がる。アウネ)
+      const slow = Math.pow(CONFIG.CURVE_VREF / (CONFIG.CURVE_VREF + speed), CONFIG.CURVE_SLOW_POWER * p.mods.curveSpeedEase);
       if (p.curve && Math.abs(p.curveTurned) < CONFIG.CURVE_MAX_ANGLE) {
         const dTheta = CONFIG.CURVE_STRENGTH * bendFromSpin(p.curve) * slow * k * p.mods.pathCurveMult;
         const c = Math.cos(dTheta), sn = Math.sin(dTheta);
@@ -2041,6 +2038,10 @@ function physicsStep() {
             T.indirectFromShot = true;
             if (!S.isCurrentShot && T.role === "enemy") T.takeWasRaise = true;
           }
+          // バーニ進化:自分が弾いた味方石にも「敵能力を無視する」性質を引き継がせる
+          if (T.role === "player" && (S.mods.raiseIgnoresEnemyAbilities || (S.inheritsIgnoreAbilities && S.mods.raiseIgnoresEnemyAbilities))) {
+            T.inheritsIgnoreAbilities = true;
+          }
           if (T.role === "enemy" && game.phase === "playerMoving") {
             T.lastHitIgnoredAbilities = bypassEnemyAbility;
             if (S.isCurrentShot) {
@@ -2080,14 +2081,25 @@ function physicsStep() {
               tSpeed *= 0.08;
               flashEnemyAbility(T);
             }
-            if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "lust" && S.indirectFromShot && !S.isCurrentShot) {
-              tSpeed *= 0.08;
-              flashEnemyAbility(T);
+            // マルガリティフェラ:スピードの逆作用。速い球ほど飛ばされにくく、遅い球ほど動く。
+            if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "lust") {
+              const fast = clamp(impact / 26, 0, 1); // 0=遅い 〜 1=速い
+              tSpeed *= 1.5 - 1.25 * fast;          // 遅い:1.5倍 〜 速い:0.25倍
+              if (fast > 0.45) flashEnemyAbility(T);
+            }
+            // ジーナ=敵に飛ばされにくい / マミ=味方に飛ばされにくい
+            if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "greed") {
+              const resistRole = T.ginaForm === "mami" ? "player" : "enemy";
+              if (S.role === resistRole) { tSpeed *= 0.25; flashEnemyAbility(T); }
             }
             if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enlargedByDellorath) flashEnemyAbility(T);
             const enemyAdvancePush = game.phase === "enemyMoving" && S.role === "enemy" && T.role === "player";
             if (enemyAdvancePush) tSpeed *= 2.0;
+            // 自分の止まりやすさ:常時(selfStopMult)に加え、相手が味方/敵のときだけ効くものを掛ける。
+            // ラコ=味方に当たると止まる / ぱふ=敵に当たると止まる
             sSpeed *= S.mods.selfStopMult;
+            if (T.role === "enemy") sSpeed *= S.mods.selfStopVsEnemy;
+            else if (T.role === "player") sSpeed *= S.mods.selfStopVsAlly;
             tSpeed *= bypassEnemyAbility || targetAbilitySuppressed ? 1 : T.mods.knockResist;
 
             // 方向付き部位: 回転入力とは無関係に、接触方向と見た目の向きp.rotで判定する。
@@ -2748,7 +2760,8 @@ function render() {
   for (const p of game.pieces) {
     if (p.role !== "player" || p.state !== "onboard") continue;
     const s = toScreen(p.x, p.y);
-    const radius = p.mods.silenceEnemyAbilities ? CONFIG.RIU_SILENCE_RADIUS : (p.mods.enemyAttractor ? CONFIG.HIROIBEO_RANGE : 0);
+    const radius = p.mods.silenceEnemyAbilities ? CONFIG.RIU_SILENCE_RADIUS * p.mods.silenceRadiusMult
+      : (p.mods.enemyAttractor ? CONFIG.HIROIBEO_RANGE * p.mods.attractRangeMult : 0);
     if (!radius) continue;
     ctx.beginPath();
     ctx.arc(s.x, s.y, radius * view.scale, 0, Math.PI * 2);
