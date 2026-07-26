@@ -52,17 +52,14 @@
     transform: none;
     display: grid; grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); gap: 4px;
     width: var(--side-panel-width); height: var(--side-panel-height); box-sizing: border-box;
-    padding: 23px 5px 6px;
+    padding: 6px 5px;
     border: 2px solid #f48fb1; border-radius: 15px;
-    background: rgba(42,39,50,0.92);
+    background: rgba(255,255,255,0.62);
     box-shadow: 0 7px 20px rgba(80,30,50,0.15);
     z-index: 3;
     transition: opacity 0.18s, transform 0.18s;
   }
-  #handBar::before {
-    content: 'えらんで'; position: absolute; top: 5px; left: 0; right: 0;
-    color: #e91e63; text-align: center; font: 9px 'DotGothic16', sans-serif;
-  }
+  /* 「えらんで」ラベルは廃止。囲いの中に石が並ぶだけのシンプルな受け皿にする。 */
   #handBar.refilling { animation: trayBump 0.38s ease-out; }
   #handBar.hidden { opacity: 0; pointer-events: none; transform: translateX(18px); }
   /* 手札は「フィールド上のストーンと同じ見た目」に:白い円＋濃い輪郭＋絵文字(キャラ色は出さない)。
@@ -77,6 +74,19 @@
     touch-action: manipulation;
   }
   .handCard .icon { display: block; font-size: 26px; line-height: 1; }
+  /* フィールド上の待機石と同じく、ソケットの石もゆっくり揺れる(個体ごとに位相をずらす) */
+  .handCard { animation: stoneWobble 2.6s ease-in-out infinite; }
+  .handCard[data-index="1"] { animation-delay: -0.65s; }
+  .handCard[data-index="2"] { animation-delay: -1.3s; }
+  .handCard[data-index="3"] { animation-delay: -1.95s; }
+  @keyframes stoneWobble {
+    0%, 100% { transform: translate(0, 0) rotate(-1.4deg); }
+    50% { transform: translate(1px, -1.5px) rotate(1.4deg); } }
+  /* 合体で消費した空きスロット(ターン開始まで補充されない) */
+  .handCard.empty {
+    animation: none; border: 2px dashed rgba(233,30,99,0.28); background: rgba(255,255,255,0.18);
+    box-shadow: none;
+  }
   .handCard .evolvedBadge {
     position: absolute; top: -3px; right: -3px; font-size: 14px;
     color: #ffcf33; text-shadow: 0 0 4px rgba(255,180,0,0.9), 0 1px 2px rgba(120,60,0,0.5);
@@ -132,21 +142,21 @@
   }
   #dangerAlert .dangerSub { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0; }
   @keyframes pinchPulse { from { transform: translateX(-50%) scale(0.96); } to { transform: translateX(-50%) scale(1.05); } }
-  /* 能力説明:置いた石/タップした敵の能力を画面中央に出す */
+  /* 能力説明:枠なし。上端をチュートリアル/ソケットと揃え、その間の中央に出す。
+     置いている石の能力は消えずに出続け、狙い始めるか敵タップで上書き/非表示になる。 */
   #abilityInfo {
-    position: fixed; left: 50%; top: 42%; z-index: 9;
-    transform: translate(-50%, -50%) scale(0.9);
-    max-width: 78vw; padding: 12px 18px; border-radius: 16px;
-    background: rgba(255,255,255,0.96); color: #4a2133;
-    border: 3px solid #f48fb1; box-shadow: 0 8px 26px rgba(80,30,50,0.28);
+    position: fixed; left: 50%; top: calc(100% - 320px); z-index: 9;
+    transform: translateX(-50%) translateY(4px);
+    width: calc(100vw - var(--side-panel-width) * 2 - 34px); max-width: 260px;
+    color: #4a2133; text-shadow: 0 2px 0 rgba(255,255,255,0.95), 0 0 10px rgba(255,255,255,0.9);
     font-family: 'DotGothic16', system-ui, sans-serif; text-align: center; pointer-events: none;
     opacity: 0; transition: opacity 0.18s, transform 0.18s;
   }
-  #abilityInfo.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  #abilityInfo.enemy { color: #ffe1ea; background: rgba(28,20,32,0.96); border-color: #ff6e9e; }
-  #abilityInfo .abilityIcon { font-size: 34px; line-height: 1; }
-  #abilityInfo .abilityName { font-size: 17px; font-weight: 900; margin-top: 4px; }
-  #abilityInfo .abilityTrait { font-size: 13px; margin-top: 4px; opacity: 0.92; }
+  #abilityInfo.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #abilityInfo.enemy { color: #7e1330; }
+  #abilityInfo .abilityIcon { font-size: 32px; line-height: 1; }
+  #abilityInfo .abilityName { font-size: 15px; font-weight: 900; margin-top: 2px; }
+  #abilityInfo .abilityTrait { font-size: 11px; margin-top: 3px; line-height: 1.35; }
   #hint {
     display: none;
   }
@@ -639,7 +649,8 @@ const game = {
   turn: 1,
   hand: [],
   selectedHandIndex: null,
-  stagedEvolved: false, // ランチャーに置いた石が合体済み(1段階進化)か
+  stagedEvolved: false, // 投球位置に置いた石が合体済み(1段階進化)か
+  mergedFromIndex: null, // 合体で消費した手札スロット(キャンセル時にここへ石を戻す)
   carry: null,          // 手札から掴んで運んでいる最中の石 {index, character, x, y}
   pendingHandIndex: null,
   refillHandIndex: null,
@@ -776,16 +787,19 @@ function activateHandCard(index) {
   const canMerge = staged !== null && staged !== index && !game.stagedEvolved &&
     game.hand[staged] && game.hand[staged].id === thisChar.id;
   if (canMerge) {
-    // 合体:置いてある石が進化。重ねた側の手札を消費して補充。
+    // 合体:置いてある石が進化。重ねた側のスロットは「空き」にする。
+    // 補充はターン開始時だけ(合体してすぐ次が出ないように)。
+    const s = game.hand[staged];
     game.stagedEvolved = true;
-    game.hand[index] = randomCharacter();
-    game.refillHandIndex = index;
+    game.mergedFromIndex = index; // キャンセル時に分離して戻す先
+    game.hand[index] = null;
+    game.refillHandIndex = null;
     addImpactFx(launcherPos().x, launcherPos().y, 3.2, false);
     playUiPopSound(360, 0.05);
-    const s = game.hand[staged];
-    if (s) showAbilityInfo(s.icon, `${s.name} ★合体`, s.trait, false);
+    if (s) showAbilityInfo(s.icon, `${s.name} ★合体`, evolvedTraitText(s), false);
   } else {
-    // 置く(選択)。別の石に持ち替えたら進化はリセット。
+    // 置く(選択)。合体済みの石から持ち替えるときは、合体を分離してソケットへ戻す。
+    if (game.stagedEvolved) splitStagedStone();
     game.selectedHandIndex = index;
     game.stagedEvolved = false;
     game.refillHandIndex = null;
@@ -796,19 +810,47 @@ function activateHandCard(index) {
   renderHand();
 }
 
-// 能力説明を画面中央に表示(置いた石/タップした敵)。数秒で自動的に消える。
-let abilityInfoTimer = null;
+// 合体をキャンセルしたとき、消費した側の石をソケットの空きスロットへ戻す(分離)。
+function splitStagedStone() {
+  const staged = game.selectedHandIndex;
+  const back = game.mergedFromIndex;
+  const stagedChar = staged !== null ? game.hand[staged] : null;
+  if (back !== null && back !== undefined && stagedChar && !game.hand[back]) {
+    game.hand[back] = stagedChar; // 合体は同じ種類同士なので、同じ石が戻る
+  }
+  game.mergedFromIndex = null;
+  game.stagedEvolved = false;
+}
+
+// 合体後の能力テキスト(進化の内容を簡潔に示す)
+const EVOLVE_TRAIT_TEXT = {
+  minari: "さらに直進・小型",
+  aune: "さらに曲がる・小型",
+  yuunarina: "2つ先まで弾道予測",
+  mayuu: "決めると得点 3倍",
+  belpet: "当てた石をぼよよん弾く",
+  rako: "大型 1.2×・味方に当たると止まる",
+  mokokun: "大型 1.5×",
+  mizu: "もっとぼよよん",
+  pafu: "大型 1.2×・敵に当たると止まる",
+  barni: "レイズ先も敵能力を無視",
+  riu: "封印範囲アップ",
+  hiroibeo: "引き寄せ範囲アップ",
+};
+function evolvedTraitText(character) {
+  return EVOLVE_TRAIT_TEXT[character?.id] ?? character?.trait ?? "";
+}
+
+// 能力説明を表示(置いた石/タップした敵)。時間では消えず、
+// 「石に触れて狙いを始める」か「別の石(敵)をタップして上書き」されたときだけ消える。
 function showAbilityInfo(icon, name, trait, isEnemy) {
   const el = document.getElementById("abilityInfo");
   if (!el) return;
   el.className = "show" + (isEnemy ? " enemy" : "");
   el.innerHTML = `<div class="abilityIcon">${icon ?? ""}</div><div class="abilityName">${name ?? ""}</div><div class="abilityTrait">${trait ?? ""}</div>`;
-  if (abilityInfoTimer) clearTimeout(abilityInfoTimer);
-  abilityInfoTimer = setTimeout(hideAbilityInfo, 2600);
 }
 function hideAbilityInfo() {
   document.getElementById("abilityInfo")?.classList.remove("show");
-  if (abilityInfoTimer) { clearTimeout(abilityInfoTimer); abilityInfoTimer = null; }
 }
 
 function renderHand() {
@@ -818,6 +860,14 @@ function renderHand() {
   bar.classList.toggle("refilling", game.refillHandIndex !== null);
   bar.replaceChildren();
   game.hand.forEach((character, index) => {
+    // 合体で消費したスロットは空(null)。ターン開始まで補充されないので、空の受け皿を描く。
+    if (!character) {
+      const empty = document.createElement("div");
+      empty.className = "handCard empty";
+      empty.dataset.index = String(index);
+      bar.appendChild(empty);
+      return;
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "handCard" + (index === game.selectedHandIndex ? " selected" : "") + (index === game.refillHandIndex ? " entering" : "");
@@ -1528,12 +1578,18 @@ function throwPiece(params) {
 
 function completeTurn() {
   if (!game.shotInProgress) return;
+  // 補充はターン開始時だけ。投げて空いたスロットと、合体で消費して空いたスロットをまとめて補充する。
   const usedIndex = game.pendingHandIndex;
-  if (usedIndex !== null) {
-    game.hand[usedIndex] = randomCharacter();
-    game.refillHandIndex = usedIndex;
+  if (usedIndex !== null) game.hand[usedIndex] = null;
+  let refilled = null;
+  for (let i = 0; i < game.hand.length; i++) {
+    if (!game.hand[i]) { game.hand[i] = randomCharacter(); if (refilled === null) refilled = i; }
+  }
+  if (refilled !== null) {
+    game.refillHandIndex = refilled;
     playUiPopSound(175, 0.065);
   }
+  game.mergedFromIndex = null;
   game.turn += 1;
   game.shotInProgress = false;
   game.pendingHandIndex = null;
