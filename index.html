@@ -2577,70 +2577,85 @@ function toScreen(x, y) {
   return { x: view.cx + x * view.scale, y: view.cy + y * view.scale };
 }
 
-// ユゥナリナ用: 現在の狙い線上で最初に接触する石を求める。
-// 既存衝突モデルでは当てられた石は入射方向へ進むため、その最初の1本だけをガイドする。
-function firstTrajectoryGuideHit(aim, shooterRadius) {
-  const origin = launcherPos();
+// ユゥナリナ用: ある地点から一方向へ進む石が、最初に接触する石を求める(汎用の光線判定)。
+// 既存衝突モデルでは当てられた石は接触点→中心の法線方向へ進むので、連鎖もこの関数で辿れる。
+function rayFirstHit(originX, originY, dirX, dirY, movingRadius, excludeUids = []) {
   let nearest = null;
   for (const target of game.pieces) {
     if (target.state !== "onboard") continue;
-    const dx = target.x - origin.x, dy = target.y - origin.y;
-    const along = dx * aim.aimDirX + dy * aim.aimDirY;
+    if (excludeUids.includes(target.uid)) continue;
+    const dx = target.x - originX, dy = target.y - originY;
+    const along = dx * dirX + dy * dirY;
     if (along <= 0) continue;
     const perpendicularSq = dx * dx + dy * dy - along * along;
-    const hitRadius = shooterRadius + pieceRadius(target);
+    const hitRadius = movingRadius + pieceRadius(target);
     if (perpendicularSq > hitRadius * hitRadius) continue;
     const contactDistance = along - Math.sqrt(Math.max(0, hitRadius * hitRadius - perpendicularSq));
     if (contactDistance < 0 || (nearest && contactDistance >= nearest.contactDistance)) continue;
     nearest = {
       target,
       contactDistance,
-      contactX: origin.x + aim.aimDirX * contactDistance,
-      contactY: origin.y + aim.aimDirY * contactDistance,
+      contactX: originX + dirX * contactDistance,
+      contactY: originY + dirY * contactDistance,
     };
   }
   return nearest;
 }
 
-function drawTrajectoryGuide(aim, shooterRadius) {
+function firstTrajectoryGuideHit(aim, shooterRadius) {
+  const origin = launcherPos();
+  return rayFirstHit(origin.x, origin.y, aim.aimDirX, aim.aimDirY, shooterRadius);
+}
+
+// ユゥナリナの能力は「当たった先の石がどう飛ぶか」を見せるもの。
+// 自分の弾道(ピンクの予測線)には破線を重ねない。進化(guideDepth=2)ではもう1つ先まで辿る。
+function drawTrajectoryGuide(aim, shooterRadius, depth = 1) {
   const hit = firstTrajectoryGuideHit(aim, shooterRadius);
   if (!hit) return;
-  const launch = toScreen(launcherPos().x, launcherPos().y);
-  const contact = toScreen(hit.contactX, hit.contactY);
-  const target = toScreen(hit.target.x, hit.target.y);
-  const normalX = hit.target.x - hit.contactX;
-  const normalY = hit.target.y - hit.contactY;
-  const normalLength = Math.hypot(normalX, normalY) || 1;
-  const targetDirX = normalX / normalLength;
-  const targetDirY = normalY / normalLength;
-  const guideLength = 170 * view.scale;
-  const endX = target.x + targetDirX * guideLength;
-  const endY = target.y + targetDirY * guideLength;
 
   ctx.save();
-  ctx.setLineDash([7, 5]);
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(74,33,51,0.82)";
-  ctx.beginPath();
-  ctx.moveTo(launch.x, launch.y);
-  ctx.lineTo(contact.x, contact.y);
-  ctx.stroke();
+  const hitUids = [];
+  let current = hit;
+  let movingRadius = shooterRadius;
 
-  ctx.strokeStyle = "rgba(0,105,110,0.9)";
-  ctx.beginPath();
-  ctx.moveTo(target.x, target.y);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  for (let step = 0; step < depth && current; step++) {
+    const stone = current.target;
+    hitUids.push(stone.uid);
+    // 当てられた石は「接触点→石の中心」の法線方向へ進む(実際の衝突モデルと同じ)
+    const nx = stone.x - current.contactX, ny = stone.y - current.contactY;
+    const nLen = Math.hypot(nx, ny) || 1;
+    const dirX = nx / nLen, dirY = ny / nLen;
 
-  const arrowAngle = Math.atan2(targetDirY, targetDirX);
-  ctx.fillStyle = "rgba(0,105,110,0.95)";
-  ctx.beginPath();
-  ctx.moveTo(endX, endY);
-  ctx.lineTo(endX - Math.cos(arrowAngle - 0.45) * 10, endY - Math.sin(arrowAngle - 0.45) * 10);
-  ctx.lineTo(endX - Math.cos(arrowAngle + 0.45) * 10, endY - Math.sin(arrowAngle + 0.45) * 10);
-  ctx.closePath();
-  ctx.fill();
+    // 次に当たる石があればそこまで、なければ一定長で描く
+    const next = rayFirstHit(stone.x, stone.y, dirX, dirY, pieceRadius(stone), hitUids);
+    const drawLen = next ? next.contactDistance : 170;
+    const from = toScreen(stone.x, stone.y);
+    const endWorldX = stone.x + dirX * drawLen, endWorldY = stone.y + dirY * drawLen;
+    const to = toScreen(endWorldX, endWorldY);
+
+    // 1本目は濃く、2本目(進化ぶん)は薄く描いて順序が分かるようにする
+    const alpha = step === 0 ? 0.9 : 0.55;
+    ctx.setLineDash([7, 5]);
+    ctx.strokeStyle = `rgba(0,105,110,${alpha})`;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const arrowAngle = Math.atan2(to.y - from.y, to.x - from.x);
+    ctx.fillStyle = `rgba(0,105,110,${alpha + 0.05})`;
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - Math.cos(arrowAngle - 0.45) * 10, to.y - Math.sin(arrowAngle - 0.45) * 10);
+    ctx.lineTo(to.x - Math.cos(arrowAngle + 0.45) * 10, to.y - Math.sin(arrowAngle + 0.45) * 10);
+    ctx.closePath();
+    ctx.fill();
+
+    movingRadius = pieceRadius(stone);
+    current = next;
+  }
   ctx.restore();
 }
 
@@ -2768,6 +2783,8 @@ function render() {
   // 合体済みなら進化後のサイズ(radiusScale)をプレビューに反映
   const stagedEvo = game.stagedEvolved && selectedCharacter ? (EVOLVE_MODS[selectedCharacter.id] || {}) : {};
   const launcherRadiusScale = stagedEvo.radiusScale ?? selectedCharacter?.mods?.radiusScale ?? 1;
+  // 軌道予測の段数:通常1、ユゥナリナ進化(合体済み)なら2つ先まで
+  const stagedGuideDepth = stagedEvo.guideDepth ?? selectedCharacter?.mods?.guideDepth ?? 1;
   const launcherRadius = CONFIG.PIECE_RADIUS * launcherRadiusScale * view.scale;
   const launcherWobbling = game.launcherReady && selectedCharacter && !a && !game.lockedAim;
   const launcherWobble = launcherWobbling ? performance.now() / 430 : 0;
@@ -2800,7 +2817,7 @@ function render() {
   if (!a && game.lockedAim) {
     drawAimDirectionLine(game.lockedAim);
     if (selectedCharacter?.mods?.trajectoryGuide) {
-      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * (selectedCharacter.mods.radiusScale ?? 1));
+      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideDepth);
     }
     ctx.fillStyle = "#e91e63";
     ctx.font = "700 13px 'DotGothic16', sans-serif";
@@ -2815,7 +2832,7 @@ function render() {
     const pushing = a.state === "push";
     drawAimDirectionLine(a);
     if (selectedCharacter?.mods?.trajectoryGuide) {
-      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * (selectedCharacter.mods.radiusScale ?? 1));
+      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideDepth);
     }
 
     // アンカーとデッドゾーン
