@@ -432,7 +432,7 @@
 const CONFIG = {
   BOARD_RADIUS: 320,
   OUT_RADIUS: 520,       // 旧盤面の外では消さず、画面外へ大きく飛んだときだけ退場
-  HOUSE_RADIUS: 195,     // 画面上で狙いやすいよう従来の1.5倍。各リング比率は維持。
+  HOUSE_RADIUS: 230,     // 一回り拡大(195→230)。石の物理・飛距離には影響しない見た目とスコア判定の値。
                           // 実カーリングの比率(12/8/4/1フィート)に合わせて内側の白・赤・ボタンを
                           // HOUSE_RADIUS×2/3, ×1/3, ×1/12で描画する。物理には一切影響しない見た目のみの値
   GRID_SPACING: 40,      // 新設(PROTO23、デバッグ表示用):盤面に重ねる格子ガイドの間隔(px)。
@@ -702,19 +702,24 @@ const ENEMIES = [
   { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵接触：大型・重量化" },
 ];
 
+// 能力テキストの表記ルール:
+//  「あてた」= 自分から当たりに行ったとき / 「あたった」= 相手が当たってきたとき
+//  対象の表記なし = 敵味方問わず、「敵に」「味方に」= その対象に限定
 const CHARACTERS = [
-  { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "かなり直進", mods: { pathCurveMult: 0.15 } },
-  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "とても飛びづらい", mods: { knockResist: 0.22 } },
-  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "味方に当たると止まる", mods: { selfStopVsAlly: 0.15 } },
-  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "敵能力を無視してヒット", mods: { ignoreEnemyAbilities: true } },
-  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "周囲の敵能力を封印", mods: { silenceEnemyAbilities: true } },
-  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "とてもよく曲がる", mods: { pathCurveMult: 1.75, curveSpeedEase: 0.55 } },
-  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの敵を強く引く", mods: { enemyAttractor: true } },
-  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に当たると止まる", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
-  { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "決めると得点 2倍", mods: { scoreMult: 2 } },
-  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "軌道予測・小型", mods: { radiusScale: 0.8, trajectoryGuide: true } },
-  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "大型 1.3×", mods: { radiusScale: 1.3 } },
-  { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "ぼよよん反発", mods: { restitution: 0.22 } },
+  { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "カーブ しづらい。", mods: { pathCurveMult: 0.15 } },
+  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。", mods: { knockResist: 0.22 } },
+  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "味方に あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
+  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてたとき 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
+  { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
+  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "カーブ しやすい。", mods: { pathCurveMult: 1.75, curveSpeedEase: 0.55 } },
+  { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの 敵を 引き寄せる。", mods: { enemyAttractor: true } },
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に あてたとき 止まりやすい。", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
+  { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スコアが 2倍 もらえる。", mods: { scoreMult: 2 } },
+  // ユゥナリナ:ベルペットの逆。弱い当たりでもよく飛び、当たった先も飛ばしやすい(レイズテイク向き)
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "あたったとき 飛びやすい。", mods: { knockResist: 2.1 } },
+  // モコクン:軌道予測はこちらへ移動(通常=相手の飛ぶ方向、進化=自分の飛ぶ方向)
+  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "相手を 飛ばす 方向が 分かる。", mods: { radiusScale: 1.3, trajectoryGuide: true } },
+  { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "あたったとき 弾く。", mods: { restitution: 0.22 } },
 ];
 
 // 合体進化(1段階のみ)。ランチャーに置いた石へ同じ石を重ねると、その石の効果が進化する。
@@ -722,14 +727,14 @@ const CHARACTERS = [
 const EVOLVE_MODS = {
   minari:    { pathCurveMult: 0.06, radiusScale: 0.62 }, // さらに曲がらず小さく(針の穴ショット)
   aune:      { pathCurveMult: 2.6, radiusScale: 0.78 },  // さらに曲がって小さく
-  yuunarina: { guideDepth: 2 },                   // さらに1つ先の弾道まで予測
+  yuunarina: { knockResist: 2.1, restitution: 0.22 },    // 飛びやすさ+弾く(レイズテイク向き)
   mayuu:     { scoreMult: 3 },                    // 得点3倍
-  belpet:    { restitution: 0.22 },               // 当たった石をぼよよん弾く(瑞珠の通常値ぶん)
-  rako:      { radiusScale: 1.2 },
-  mokokun:   { radiusScale: 1.5 },
-  mizu:      { restitution: 0.35 },               // もっとぼよよん
-  pafu:      { radiusScale: 1.2 },
-  barni:     { raiseIgnoresEnemyAbilities: true },// レイズテイクした石も敵能力を無視
+  belpet:    { restitution: 0.22 },               // 飛びづらさ+当てた石を弾く(ガード向き)
+  rako:      { selfStopVsAlly: 0.04 },            // 味方にあてるとぴたりと止まる
+  mokokun:   { guideSelf: true },                 // 予測対象を「自分の飛ぶ方向」へ切替
+  mizu:      { restitution: 0.35 },               // もっと弾く
+  pafu:      { selfStopVsEnemy: 0.04 },           // 敵にあてるとぴたりと止まる
+  barni:     { raiseIgnoresEnemyAbilities: true },// 飛ばした石も敵能力を無視
   riu:       { silenceRadiusMult: 1.6 },          // 封印範囲を拡大
   hiroibeo:  { attractRangeMult: 1.7 },           // 引き寄せ範囲を拡大
 };
@@ -842,18 +847,18 @@ function splitStagedStone() {
 
 // 合体後の能力テキスト(進化の内容を簡潔に示す)
 const EVOLVE_TRAIT_TEXT = {
-  minari: "さらに直進・小型",
-  aune: "さらに曲がる・小型",
-  yuunarina: "2つ先まで弾道予測",
-  mayuu: "決めると得点 3倍",
-  belpet: "当てた石をぼよよん弾く",
-  rako: "大型 1.2×・味方に当たると止まる",
-  mokokun: "大型 1.5×",
-  mizu: "もっとぼよよん",
-  pafu: "大型 1.2×・敵に当たると止まる",
-  barni: "レイズ先も敵能力を無視",
-  riu: "封印範囲アップ",
-  hiroibeo: "引き寄せ範囲アップ",
+  minari: "もっと カーブ しづらい。",
+  belpet: "あたったとき 飛びづらいし 弾く。",
+  rako: "味方に あてたとき ぴたりと止まる。",
+  barni: "飛ばしたときも 能力を 無視。",
+  riu: "もう少し広く 敵の 能力を 封印。",
+  aune: "もっと カーブ しやすい。",
+  hiroibeo: "もう少し広く 敵を 引き寄せる。",
+  pafu: "敵に あてたとき ぴたりと止まる。",
+  mayuu: "スコアが 3倍 もらえる。",
+  yuunarina: "あたったとき 飛びやすいし 弾く。",
+  mokokun: "自分を 飛ばす 方向が 分かる。",
+  mizu: "あたったとき もっと 弾く。",
 };
 function evolvedTraitText(character) {
   return EVOLVE_TRAIT_TEXT[character?.id] ?? character?.trait ?? "";
@@ -993,7 +998,7 @@ function createPiece(x, y, role, character = null) {
       silenceRadiusMult: 1,   // 敵能力の封印範囲の倍率(リウ進化)
       attractRangeMult: 1,    // 敵の引き寄せ範囲の倍率(ヒロイベオ進化)
       raiseIgnoresEnemyAbilities: false, // レイズテイクでも敵能力を無視(バーニ進化)
-      guideDepth: 1,          // 軌道予測で何段先まで見るか(ユゥナリナ進化で2)
+      guideSelf: false,       // 軌道予測の対象を「自分の飛ぶ方向」にする(モコクン進化)
       radiusScale: 1,
       trajectoryGuide: false,
       partType: null,
@@ -1898,24 +1903,19 @@ function handleAllPiecesSettled() {
       game.enemyPostMoveApplied = true;
       if (applyEnemyPostMoveAbilities()) return;
     }
-    const ringThresholds = [
-        CONFIG.HOUSE_RADIUS,
-        CONFIG.HOUSE_RADIUS * (2 / 3),
-        CONFIG.HOUSE_RADIUS * (1 / 3),
-      ];
-      const currentEnemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
-      let reinforcementCount = 0;
-      for (const enemy of currentEnemies) {
-        if (!enemy.houseRingsReached) enemy.houseRingsReached = new Set();
-        const distance = Math.hypot(enemy.x, enemy.y);
-        for (let i = 0; i < ringThresholds.length; i++) {
-          if (distance <= ringThresholds[i] && !enemy.houseRingsReached.has(i)) {
-            enemy.houseRingsReached.add(i);
-            reinforcementCount++;
-          }
-        }
+    // 増援は「4フット(ハウス内側の輪)へ初めて到達した敵がいるターン」だけ、1ターンに1体まで。
+    // 12/8フット到達では増えない(以前は3つの輪それぞれで増えて一気に湧いていた)。
+    const fourFootRadius = CONFIG.HOUSE_RADIUS * (1 / 3);
+    const currentEnemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
+    let reachedFourFoot = false;
+    for (const enemy of currentEnemies) {
+      if (!enemy.houseRingsReached) enemy.houseRingsReached = new Set();
+      if (Math.hypot(enemy.x, enemy.y) <= fourFootRadius && !enemy.houseRingsReached.has("four")) {
+        enemy.houseRingsReached.add("four");
+        reachedFourFoot = true;
       }
-      for (let i = 0; i < reinforcementCount; i++) spawnEnemy();
+    }
+    if (reachedFourFoot) spawnEnemy();
     completeTurn();
   }
 }
@@ -2607,55 +2607,60 @@ function firstTrajectoryGuideHit(aim, shooterRadius) {
   return rayFirstHit(origin.x, origin.y, aim.aimDirX, aim.aimDirY, shooterRadius);
 }
 
-// ユゥナリナの能力は「当たった先の石がどう飛ぶか」を見せるもの。
-// 自分の弾道(ピンクの予測線)には破線を重ねない。進化(guideDepth=2)ではもう1つ先まで辿る。
-function drawTrajectoryGuide(aim, shooterRadius, depth = 1) {
+// モコクンの能力:最初に当たる石の「相手が飛ぶ方向」(通常)、または進化で
+// 「自分が弾かれて飛ぶ方向」(guideSelf)を見せる。自分の弾道(ピンクの線)には破線を重ねない。
+function drawTrajectoryGuide(aim, shooterRadius, showSelf = false) {
   const hit = firstTrajectoryGuideHit(aim, shooterRadius);
   if (!hit) return;
+  const stone = hit.target;
+
+  // 接触点→相手の中心が法線。相手はこの法線方向へ、自分は法線と直角(接線)方向へ逸れる。
+  const nx = stone.x - hit.contactX, ny = stone.y - hit.contactY;
+  const nLen = Math.hypot(nx, ny) || 1;
+  const normX = nx / nLen, normY = ny / nLen;
+
+  let originX, originY, dirX, dirY, movingRadius;
+  if (showSelf) {
+    // 自分の進行方向から法線成分を抜いた接線方向(ビリヤードの90度ルール)
+    const along = aim.aimDirX * normX + aim.aimDirY * normY;
+    let tx = aim.aimDirX - along * normX, ty = aim.aimDirY - along * normY;
+    const tLen = Math.hypot(tx, ty);
+    if (tLen < 1e-6) return; // 完全な正面衝突では自分はほぼ止まるので描かない
+    dirX = tx / tLen; dirY = ty / tLen;
+    originX = hit.contactX; originY = hit.contactY;
+    movingRadius = shooterRadius;
+  } else {
+    dirX = normX; dirY = normY;
+    originX = stone.x; originY = stone.y;
+    movingRadius = pieceRadius(stone);
+  }
+
+  // 次に当たる石があればそこまで、なければ一定長で描く
+  const next = rayFirstHit(originX, originY, dirX, dirY, movingRadius, [stone.uid]);
+  const drawLen = next ? next.contactDistance : 170;
+  const from = toScreen(originX, originY);
+  const to = toScreen(originX + dirX * drawLen, originY + dirY * drawLen);
 
   ctx.save();
   ctx.lineWidth = 2;
-  const hitUids = [];
-  let current = hit;
-  let movingRadius = shooterRadius;
+  // 自分の方向は暖色、相手の方向は寒色にして区別する
+  const color = showSelf ? "233,30,99" : "0,105,110";
+  ctx.setLineDash([7, 5]);
+  ctx.strokeStyle = `rgba(${color},0.9)`;
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.lineTo(to.x, to.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
-  for (let step = 0; step < depth && current; step++) {
-    const stone = current.target;
-    hitUids.push(stone.uid);
-    // 当てられた石は「接触点→石の中心」の法線方向へ進む(実際の衝突モデルと同じ)
-    const nx = stone.x - current.contactX, ny = stone.y - current.contactY;
-    const nLen = Math.hypot(nx, ny) || 1;
-    const dirX = nx / nLen, dirY = ny / nLen;
-
-    // 次に当たる石があればそこまで、なければ一定長で描く
-    const next = rayFirstHit(stone.x, stone.y, dirX, dirY, pieceRadius(stone), hitUids);
-    const drawLen = next ? next.contactDistance : 170;
-    const from = toScreen(stone.x, stone.y);
-    const endWorldX = stone.x + dirX * drawLen, endWorldY = stone.y + dirY * drawLen;
-    const to = toScreen(endWorldX, endWorldY);
-
-    // 1本目は濃く、2本目(進化ぶん)は薄く描いて順序が分かるようにする
-    const alpha = step === 0 ? 0.9 : 0.55;
-    ctx.setLineDash([7, 5]);
-    ctx.strokeStyle = `rgba(0,105,110,${alpha})`;
-    ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const arrowAngle = Math.atan2(to.y - from.y, to.x - from.x);
-    ctx.fillStyle = `rgba(0,105,110,${alpha + 0.05})`;
-    ctx.beginPath();
-    ctx.moveTo(to.x, to.y);
-    ctx.lineTo(to.x - Math.cos(arrowAngle - 0.45) * 10, to.y - Math.sin(arrowAngle - 0.45) * 10);
-    ctx.lineTo(to.x - Math.cos(arrowAngle + 0.45) * 10, to.y - Math.sin(arrowAngle + 0.45) * 10);
-    ctx.closePath();
-    ctx.fill();
-
-    movingRadius = pieceRadius(stone);
-    current = next;
-  }
+  const arrowAngle = Math.atan2(to.y - from.y, to.x - from.x);
+  ctx.fillStyle = `rgba(${color},0.95)`;
+  ctx.beginPath();
+  ctx.moveTo(to.x, to.y);
+  ctx.lineTo(to.x - Math.cos(arrowAngle - 0.45) * 10, to.y - Math.sin(arrowAngle - 0.45) * 10);
+  ctx.lineTo(to.x - Math.cos(arrowAngle + 0.45) * 10, to.y - Math.sin(arrowAngle + 0.45) * 10);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -2692,45 +2697,18 @@ function render() {
 
   // ハウス(カーリングの的、デバッグ表示用):外周(青)→白→赤→ボタン(白)
   const hR = CONFIG.HOUSE_RADIUS * view.scale;
-  // ドットで描くので、リングは重ならない「帯(内径〜外径)」として定義する
   const houseRings = [
-    { r: hR, inner: hR * (2 / 3), color: "#8f78b5" },        // 12フィート相当(ラベンダー)
-    { r: hR * (2 / 3), inner: hR * (1 / 3), color: "#fff8fb" }, // 8フィート相当(白)
-    { r: hR * (1 / 3), inner: hR * (1 / 12), color: "#f48fb1" }, // 4フィート相当(ピンク)
+    { r: hR, color: "#8f78b5" },        // 12フィート相当(ラベンダー)
+    { r: hR * (2 / 3), color: "#fff8fb" }, // 8フィート相当(白)
+    { r: hR * (1 / 3), color: "#f48fb1" }, // 4フィート相当(ピンク)
+    { r: hR * (1 / 12), color: "#ffffff" }, // ボタン(白)
   ];
-  // ハウスはベタ塗りではなくドット(点描)で描く。外側のリングほど点を大きく・粗く置き、
-  // 内側ほど細かくして密度で色を出す。ドットはグリッド上に並べ、リング内だけを描画する。
   for (const ring of houseRings) {
-    const inner = ring.inner ?? 0;
-    const step = Math.max(4, ring.r * 0.15);      // 点の間隔(リングが小さいほど細かい)
-    const dot = Math.max(1.1, step * 0.30);       // 点の半径
-    ctx.fillStyle = ring.color;
-    for (let gy = -ring.r; gy <= ring.r; gy += step) {
-      // 行ごとに半ステップずらして千鳥に並べる(格子っぽさを避ける)
-      const offset = (Math.round(gy / step) % 2) ? step / 2 : 0;
-      for (let gx = -ring.r; gx <= ring.r; gx += step) {
-        const x = gx + offset, y = gy;
-        const d = Math.hypot(x, y);
-        if (d > ring.r - dot * 0.5 || d < inner - dot * 0.5) continue;
-        ctx.beginPath();
-        ctx.arc(x, y, dot, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    // リングの輪郭を細くなぞって、的の輪郭は保つ
     ctx.beginPath();
     ctx.arc(0, 0, ring.r, 0, Math.PI * 2);
-    ctx.strokeStyle = ring.color;
-    ctx.globalAlpha = 0.5;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = ring.color;
+    ctx.fill();
   }
-  // ボタン(中心の小円)は小さすぎて点描にならないのでベタ塗りのまま残す
-  ctx.beginPath();
-  ctx.arc(0, 0, hR * (1 / 12), 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const heartFloat = Math.sin(performance.now() / 430) * 3;
@@ -2784,7 +2762,8 @@ function render() {
   const stagedEvo = game.stagedEvolved && selectedCharacter ? (EVOLVE_MODS[selectedCharacter.id] || {}) : {};
   const launcherRadiusScale = stagedEvo.radiusScale ?? selectedCharacter?.mods?.radiusScale ?? 1;
   // 軌道予測の段数:通常1、ユゥナリナ進化(合体済み)なら2つ先まで
-  const stagedGuideDepth = stagedEvo.guideDepth ?? selectedCharacter?.mods?.guideDepth ?? 1;
+  // 軌道予測の対象:通常は相手の飛ぶ方向、モコクン進化(合体済み)なら自分の飛ぶ方向
+  const stagedGuideSelf = Boolean(stagedEvo.guideSelf ?? selectedCharacter?.mods?.guideSelf);
   const launcherRadius = CONFIG.PIECE_RADIUS * launcherRadiusScale * view.scale;
   const launcherWobbling = game.launcherReady && selectedCharacter && !a && !game.lockedAim;
   const launcherWobble = launcherWobbling ? performance.now() / 430 : 0;
@@ -2817,7 +2796,7 @@ function render() {
   if (!a && game.lockedAim) {
     drawAimDirectionLine(game.lockedAim);
     if (selectedCharacter?.mods?.trajectoryGuide) {
-      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideDepth);
+      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideSelf);
     }
     ctx.fillStyle = "#e91e63";
     ctx.font = "700 13px 'DotGothic16', sans-serif";
@@ -2832,7 +2811,7 @@ function render() {
     const pushing = a.state === "push";
     drawAimDirectionLine(a);
     if (selectedCharacter?.mods?.trajectoryGuide) {
-      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideDepth);
+      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideSelf);
     }
 
     // アンカーとデッドゾーン
@@ -3317,7 +3296,11 @@ function bindHowTo() {
     e.stopPropagation();
     if (page < 2) { page++; renderPage(); } else { close(); }
   });
-  overlay.addEventListener("pointerdown", (e) => e.stopPropagation());
+  // パネルの外(オーバーレイの余白)を触ったら閉じる
+  overlay.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    if (!e.target.closest("#howToPanel")) close();
+  });
   renderPage();
 }
 
@@ -3371,7 +3354,11 @@ function bindCharacterBook() {
     e.stopPropagation();
     if (page < groups.length - 1) { page++; renderPage(); } else { close(); }
   });
-  overlay.addEventListener("pointerdown", (e) => e.stopPropagation());
+  // パネルの外を触ったら閉じる
+  overlay.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    if (!e.target.closest("#characterBookPanel")) close();
+  });
   renderPage();
 }
 
