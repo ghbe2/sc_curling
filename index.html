@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>しゅがけカーリング サバイバル PROTO24</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -78,14 +78,8 @@
   .handCard .icon { display: block; font-size: calc(var(--stone-size, 40px) * 0.62); line-height: 1; }
   /* 運搬中は、その石はソケットから物理的に持ち出されているので受け皿を空にする */
   .handCard.carrying { visibility: hidden; }
-  /* フィールド上の待機石と同じく、ソケットの石もゆっくり揺れる(個体ごとに位相をずらす) */
-  .handCard { animation: stoneWobble 2.6s ease-in-out infinite; }
-  .handCard[data-index="1"] { animation-delay: -0.65s; }
-  .handCard[data-index="2"] { animation-delay: -1.3s; }
-  .handCard[data-index="3"] { animation-delay: -1.95s; }
-  @keyframes stoneWobble {
-    0%, 100% { transform: translate(0, 0) rotate(-1.4deg); }
-    50% { transform: translate(1px, -1.5px) rotate(1.4deg); } }
+  /* ソケットの中の石は、止まらずゆっくり滑り続ける(位置はJSで物理的に更新する) */
+  .handCard { will-change: transform; }
   /* 合体で消費した空きスロット(ターン開始まで補充されない) */
   .handCard.empty {
     animation: none; border: 2px dashed rgba(233,30,99,0.28); background: rgba(255,255,255,0.18);
@@ -96,9 +90,9 @@
     color: #ffcf33; text-shadow: 0 0 4px rgba(255,180,0,0.9), 0 1px 2px rgba(120,60,0,0.5);
     animation: selectedFloat 0.9s ease-in-out infinite alternate;
   }
+  /* 選択中は枠だけで示す(位置はドリフトのtransformが受け持つので上下アニメはしない) */
   .handCard.selected {
-    box-shadow: 0 0 0 3px rgba(233,30,99,0.35), 0 5px 16px rgba(80,30,50,0.2);
-    animation: selectedFloat 1.25s ease-in-out infinite alternate;
+    box-shadow: 0 0 0 3px rgba(233,30,99,0.5), 0 5px 16px rgba(80,30,50,0.2);
   }
   .handCard.entering { animation: cardRefill 0.46s cubic-bezier(.2,1.45,.45,1); }
   @keyframes selectedFloat { from { transform: translateY(0) scale(1); } to { transform: translateY(-3px) scale(1.025); } }
@@ -168,6 +162,20 @@
   }
   #abilityInfo.enemy { background: rgba(32,22,36,0.97); color: #ffe1ea; }
   #abilityInfo.enemy::after { border-top-color: rgba(32,22,36,0.97); }
+  /* 敵はハウス下の余白に固定表示(吹き出しではなくアイコン+説明の横並び) */
+  #abilityInfo.fixed {
+    left: 50%; top: calc(100% - 360px); transform: translate(-50%, 0) scale(1);
+    max-width: min(300px, 86vw); padding: 9px 14px;
+  }
+  #abilityInfo.fixed::after { display: none; }
+  #abilityInfo .abilityRow { display: flex; align-items: center; gap: 10px; text-align: left; }
+  #abilityInfo .abilityIcon {
+    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.34);
+    background: radial-gradient(circle at 38% 32%, #ffffff, #f2eef0 70%);
+    font-size: 24px; line-height: 38px; text-align: center;
+  }
+  #abilityInfo .abilityBody { display: flex; flex-direction: column; min-width: 0; }
   #abilityInfo .abilityName { font-size: 13px; font-weight: 900; }
   #abilityInfo .abilityTrait { font-size: 11px; margin-top: 3px; line-height: 1.35; }
   #hint {
@@ -199,7 +207,16 @@
     background: rgba(255,255,255,0.82); border-radius: 12px;
     padding: 7px 12px 8px; box-shadow: 0 2px 10px rgba(80,30,50,0.14);
   }
+  /* デバッグ用「ぜんぶ出す」:ソケットの真下に仮置き(最終的には削除する) */
+  #allOutBtn {
+    position: fixed; right: 7px; top: calc(100% - 34px); z-index: 4;
+    width: var(--side-panel-width); box-sizing: border-box; text-align: center;
+    font-size: 9px; padding: 5px 2px; opacity: 0.8;
+  }
   #scorePanel .label { opacity: 0.6; font-size: 11px; margin-right: 5px; }
+  /* スコアは6桁ぶんの幅を最初から確保して、桁が増えても枠が広がらないようにする */
+  #scorePanel .scoreValue { display: inline-block; min-width: 6ch; text-align: right; }
+  #scorePanel #turnTextVisible { display: inline-block; min-width: 3ch; text-align: right; }
   #scorePanel #turnTextVisible { font-size: 16px; }
   #scorePanel .scoreValue { color: #e91e63; font-size: 27px; font-weight: 900; margin-left: 6px; }
   #scoreFeed { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 5px; pointer-events: none; }
@@ -256,17 +273,22 @@
   #spinMeter { position: relative; overflow: visible; }
   #spinMeter::after { content: ''; position: absolute; left: 50%; top: -2px; width: 2px; height: 11px; background: #4a2133; transform: translateX(-1px); }
   /* ③なげる:スピードは「縦バー」で指の押し上げと連動(上へ押すほど満ちる)。カーブは横バー。 */
-  .speedWrap { display: flex; align-items: stretch; gap: 7px; margin-top: 4px; }
-  .vBar { position: relative; width: 17px; height: 42px; flex: 0 0 auto;
+  /* スピードとカーブは同じ構成:「見出し行(名前+値)」→「ゲージ」。位置と余白を揃える */
+  .gaugeBlock { margin-top: 5px; }
+  .gaugeRow { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; margin-bottom: 3px; }
+  .gaugeName { font-size: 9px; opacity: 0.85; white-space: nowrap; }
+  .gaugeVal {
+    font-size: 9px; color: #e91e63; white-space: nowrap;
+    overflow: hidden; text-overflow: clip; max-width: 62px; text-align: right;
+  }
+  .speedWrap { display: flex; justify-content: center; }
+  .vBar { position: relative; width: 100%; height: 34px;
     border-radius: 9px; background: #f4dce5; overflow: hidden; }
+  /* スピードは縦の伸びで示す(指を上へ押すほど下から満ちる) */
   .vFill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
     background: linear-gradient(0deg,#81d4fa,#ff4081); transition: height 0.05s; }
-  .vArrow { position: absolute; left: 0; right: 0; top: 1px; text-align: center;
-    font-size: 10px; color: rgba(74,33,51,0.5); }
-  .speedSide { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
-  .gaugeRow { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; margin-top: 5px; }
-  .gaugeName { font-size: 9px; opacity: 0.85; white-space: nowrap; }
-  .gaugeVal { font-size: 9px; color: #e91e63; white-space: nowrap; }
+  .vArrow { position: absolute; left: 0; right: 0; top: 0; text-align: center;
+    font-size: 9px; line-height: 12px; color: rgba(74,33,51,0.45); }
   .bar2 { position: relative; width: 100%; height: 11px; border-radius: 8px; background: #f4dce5; overflow: hidden; margin-top: 2px; }
   .fill2 { position: absolute; top: 0; bottom: 0; left: 0; width: 0%; background: linear-gradient(90deg,#81d4fa,#ff4081); transition: width 0.05s; }
   .curveBar { overflow: visible; }
@@ -338,6 +360,7 @@
   }
   .characterBookHeader { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; border-bottom: 1px solid #f7bfd1; }
   .characterBookHeader h2 { margin: 0; color: #e91e63; font-size: 19px; }
+  #characterBookLead { flex: 1; margin: 0 8px; color: #a1607a; font: 10px 'DotGothic16', sans-serif; text-align: right; }
   .characterBookPage { display: none; height: min(64vh, 470px); grid-template-columns: repeat(3, minmax(0,1fr)); grid-auto-rows: minmax(0,1fr); gap: 7px; padding: 9px; box-sizing: border-box; }
   .characterBookPage.active { display: grid; }
   .characterCard { display: grid; place-items: center; align-content: center; gap: 3px; min-width: 0; padding: 5px; border: 1px solid #f5b0c8; border-radius: 12px; background: white; text-align: center; box-shadow: 0 3px 9px rgba(80,30,50,.08); }
@@ -384,8 +407,9 @@
 <div id="scenarioBar">
   <button class="btn" id="howToBtn">遊び方</button>
   <button class="btn" id="characterBookBtn">キャラ性能</button>
-  <button class="btn" id="allOutBtn" aria-pressed="false">ぜんぶ出す OFF</button>
 </div>
+<!-- デバッグ用。最終的には削除する -->
+<button class="btn" id="allOutBtn" aria-pressed="false">ぜんぶ出す OFF</button>
 <div id="handBar" aria-label="キャラストーン手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
@@ -396,7 +420,7 @@
 </div>
 <div id="characterBookOverlay" role="dialog" aria-modal="true" aria-labelledby="characterBookTitle">
   <div id="characterBookPanel">
-    <div class="characterBookHeader"><h2 id="characterBookTitle">キャラ性能</h2><button class="btn" id="characterBookClose" aria-label="キャラ性能を閉じる">×</button></div>
+    <div class="characterBookHeader"><h2 id="characterBookTitle">キャラ性能</h2><span id="characterBookLead">カードをタップすると合体後の能力</span><button class="btn" id="characterBookClose" aria-label="キャラ性能を閉じる">×</button></div>
     <div id="characterBookPages"></div>
     <div class="characterBookPager"><button class="btn" id="characterBookPrev">まえ</button><span id="characterBookPageLabel">味方 1 / 2</span><button class="btn" id="characterBookNext">つぎ</button></div>
   </div>
@@ -407,7 +431,7 @@
   <div class="tutorialBody">
   <div class="tutorialStep" id="tutorialSelect"><b class="tutorialTitle">① えらぶ</b><div class="selectAnim"><span class="selectBall"></span></div><b id="selectInstruction">つかんで運ぶ</b><br><span id="selectSub">したの◯へ</span></div>
   <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">② ねらう</b><div class="tutorialGesture"><span class="gestureArrow" id="aimGestureArrow">↓</span><span class="gestureFinger">👆</span></div><b id="aimInstruction">下へ引く</b><br><span id="aimSub">狙いを決める</span></div>
-  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="speedWrap"><div class="vBar"><div class="vFill" id="speedBarFill"></div><span class="vArrow">↑</span></div><div class="speedSide"><span class="gaugeName">スピード</span><span class="gaugeVal" id="speedReadout">―</span></div></div><div class="gaugeRow"><span class="gaugeName">カーブ</span><span class="gaugeVal" id="curveReadout">まがりにくい</span></div><div class="bar2 curveBar"><div class="fill2 curveFill" id="curveBarFill"></div></div></div>
+  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">スピード</span><span class="gaugeVal" id="speedReadout">―</span></div><div class="speedWrap"><div class="vBar"><div class="vFill" id="speedBarFill"></div><span class="vArrow">↑</span></div></div></div><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">カーブ</span><span class="gaugeVal" id="curveReadout">まがりにくい</span></div><div class="bar2 curveBar"><div class="fill2 curveFill" id="curveBarFill"></div></div></div></div>
   </div>
 </div>
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
@@ -426,8 +450,8 @@
     </div>
     <div class="howToPage" data-page="2">
       <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑦ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>曲がり方、大きさ、ぶつける力などがキャラごとに違うよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>七つの大罪はそれぞれ違う個性を持つ。動きをよく見よう。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>カーブのしやすさ、あたったときの飛びやすさ、止まりやすさなど。同じ石を重ねると合体して強くなるよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>石をタップすると能力が見られるよ。動きをよく見よう。</div></article>
     </div>
     <div class="howToPager"><button class="btn" id="howToPrev">まえ</button><span id="howToPageLabel">● ○ ○</span><button class="btn" id="howToNext">つぎ</button></div>
   </div>
@@ -594,7 +618,10 @@ const CONFIG = {
   // ランチャーは画面下部にあり、Dは端末の画面比率で変わる。固定13.0は基準端末(375×812、D≈980)では
   // ハウス外周に止まるが、Dが小さい端末(横長・縦短め)では同じ13.0が中心まで到達してしまう
   //(ユーザー報告「最弱でも円の真ん中まで行く」の原因)。Dから逆算すれば端末によらず狙った半径で止まる
-  STOP_DIST_PER_SPEED: 47.5, // 実測係数:直進の石が停止するまでの走行距離(world px) ÷ 初速(px/frame)。
+  STOP_DIST_PER_SPEED: 42.4, // 実測係数:直進の石が停止するまでの走行距離(world px) ÷ 初速(px/frame)。
+                          // 47.5→42.4:ベースのカーブ強度を0.010→0.016へ上げた際、石が横へ流れる分だけ
+                          // 中心方向への到達が短くなり、最弱パワーが盤(320)に入らずr≈355で止まっていた。
+                          // 再計測して最弱がMIN_THROW_TARGET_R(276)で止まるよう補正(検証:r=277)。
                           // 引き継ぎ再計測:65.35→47.5。GPTが追加した転がり抵抗(ROLLING_RESISTANCE)で
                           // 同じ初速でも走行距離が短くなったため実測し直した(FRICTION/抵抗変更時は要再計測)
   MIN_THROW_TARGET_R: 276, // 最弱パワー・直進投球を止めたい盤中心からの半径(px)。引き継ぎ再調整で210→276。
@@ -710,14 +737,16 @@ const game = {
   allOutMode: false, // B対応:trueだと最初から味方12種・敵7種すべて出る(段階アンロックを無効化)
 };
 
+// 能力テキストは味方と同じレギュレーション(「あてた」=自分から/「あたった」=相手から、
+// 対象表記なし=敵味方問わず、「味方に」「敵に」で限定)で統一する
 const ENEMIES = [
-  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "味方接触で一度だけムイ生成" },
-  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "味方接触：小型・弱体化" },
-  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い球ほど効かない／遅い球で動く" },
-  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "移動1.55倍・移動後に弱く弾く" },
-  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "レイズテイクのみ有効" },
-  { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "ジーナ=敵に強い／マミ=味方に強い" },
-  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵接触：大型・重量化" },
+  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "味方に あたったとき 分身を 生む。" },
+  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "味方に あたったとき 小さく 弱くする。" },
+  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い石が あたったとき 飛びづらい。" },
+  { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "速く 近づき まわりを 弾く。" },
+  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "あてたときは 飛ばない。飛ばした石なら 飛ぶ。" },
+  { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "ジーナは 敵に、マミは 味方に あたったとき 飛びづらい。" },
+  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵に あたったとき 大きく 重くする。" },
 ];
 
 // 能力テキストの表記ルール:
@@ -729,7 +758,9 @@ const CHARACTERS = [
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "味方に あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
   { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてたとき 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
-  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "カーブ しやすい。", mods: { pathCurveMult: 1.75, curveSpeedEase: 0.55 } },
+  // pathCurveMult 1.75→1.25:最大ベンド(弱いフリック)だと盤外まで曲がって出てしまい
+  // 「操作できずに止まる」との報告があったため抑制。速いショットで曲がる特徴(curveSpeedEase)は維持
+  { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "カーブ しやすい。", mods: { pathCurveMult: 1.25, curveSpeedEase: 0.55 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの 敵を 引き寄せる。", mods: { enemyAttractor: true } },
   { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に あてたとき 止まりやすい。", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スコアが 2倍 もらえる。", mods: { scoreMult: 2 } },
@@ -744,7 +775,7 @@ const CHARACTERS = [
 // ミナリ=小さくなる/ベルペット=大きくなる(ユーザー指定)。他は主効果を強化。throwPieceで適用。
 const EVOLVE_MODS = {
   minari:    { pathCurveMult: 0.06, radiusScale: 0.62 }, // さらに曲がらず小さく(針の穴ショット)
-  aune:      { pathCurveMult: 2.6, radiusScale: 0.78 },  // さらに曲がって小さく
+  aune:      { pathCurveMult: 1.8, radiusScale: 0.78 },  // さらに曲がって小さく(2.6→1.8、盤外飛び出し抑制)
   yuunarina: { knockResist: 2.1, restitution: 0.22 },    // 飛びやすさ+弾く(レイズテイク向き)
   mayuu:     { scoreMult: 3 },                    // 得点3倍
   belpet:    { restitution: 0.22 },               // 飛びづらさ+当てた石を弾く(ガード向き)
@@ -889,7 +920,17 @@ function evolvedTraitText(character) {
 function showAbilityInfo(icon, name, trait, isEnemy, anchorPiece = null) {
   const el = document.getElementById("abilityInfo");
   if (!el) return;
-  el.className = "show" + (isEnemy ? " enemy" : "");
+  if (isEnemy) {
+    // 敵は盤の奥にいて吹き出しが読みづらいので、ハウス下の余白にアイコン付きで固定表示する
+    el.className = "show enemy fixed";
+    el.innerHTML = `<div class="abilityRow"><span class="abilityIcon">${icon ?? ""}</span>`
+      + `<span class="abilityBody"><span class="abilityName">${name ?? ""}</span>`
+      + `<span class="abilityTrait">${trait ?? ""}</span></span></div>`;
+    el.style.left = ""; el.style.top = "";
+    game.abilityAnchor = null;
+    return;
+  }
+  el.className = "show";
   el.innerHTML = `<div class="abilityName">${name ?? ""}</div><div class="abilityTrait">${trait ?? ""}</div>`;
   game.abilityAnchor = anchorPiece ? { uid: anchorPiece.uid } : { launcher: true };
   positionAbilityInfo();
@@ -1097,7 +1138,7 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
     "enemy"
   );
   p.enemyId = enemy.id;
-  p.enemyName = enemy.id === "greed" ? "ジーナ（強欲）" : `${enemy.name}（${enemy.sin}）`;
+  p.enemyName = enemy.id === "greed" ? "ジーナ" : enemy.name; // 大罪の表記は出さない
   p.enemyIcon = enemy.icon;
   p.icon = enemy.icon;
   p.houseRingsReached = new Set();
@@ -1128,7 +1169,7 @@ function spawnMuiNear(wenka) {
   const angle = Math.atan2(wenka.y, wenka.x) + side * Math.PI / 2;
   const mui = createPiece(wenka.x, wenka.y, "enemy");
   mui.enemyId = "mui";
-  mui.enemyName = "ムイ（分身）";
+  mui.enemyName = "ムイ";
   mui.enemyIcon = "🐻";
   mui.icon = "🐻";
   mui.color = "#d9b7aa";
@@ -1238,7 +1279,7 @@ function toggleGinaForms() {
     const isMami = enemy.ginaForm === "mami";
     enemy.icon = isMami ? "🦝" : "🦊";
     enemy.enemyIcon = enemy.icon;
-    enemy.enemyName = isMami ? "マミ（強欲）" : "ジーナ（強欲）";
+    enemy.enemyName = isMami ? "マミ" : "ジーナ";
     enemy.color = isMami ? "#c8bbb0" : "#e4e1dc";
   }
 }
@@ -1433,7 +1474,7 @@ function updateThrowTutorial() {
   // カーブ表現:横ズレが大きい(強回転)ほど「まがりにくい」。中央ほど弱回転=よく曲がる。
   // 曲がるときの向きは左右で示す(真ん中は「まっすぐ」ではないことに注意)。
   const curveText = document.getElementById("curveReadout");
-  if (curveText) curveText.textContent = Math.abs(curve) >= 0.7 ? "まがりにくい" : curve < 0 ? "← 左にまがる" : "右にまがる →";
+  if (curveText) curveText.textContent = Math.abs(curve) >= 0.7 ? "まがりにくい" : curve < 0 ? "左にまがる" : "右にまがる";
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
@@ -2559,6 +2600,47 @@ function bindSoundButton() {
   });
 }
 
+/* ---------- ソケット内の石のドリフト(お遊び) ----------
+ * ソケットの中で石が止まることなくゆっくり滑り続け、壁や他の石にぶつかると跳ねる。
+ * ゲーム進行には一切影響しない、見た目だけの演出。位置はCSS transformで動かす。
+ * ------------------------------------------------------ */
+const socketDrift = new Map(); // index -> {x, y, vx, vy}
+function updateSocketDrift(delta) {
+  const bar = document.getElementById("handBar");
+  if (!bar || bar.classList.contains("hidden")) return;
+  const cards = [...bar.querySelectorAll(".handCard")].filter(c => !c.classList.contains("carrying"));
+  const dt = Math.min(delta, 0.05);
+  const bounds = [];
+  for (const card of cards) {
+    const index = card.dataset.index;
+    // 各石は自分のセル内だけを動く。セル中心を原点とした相対座標で扱う。
+    const cellW = card.parentElement.clientWidth, cellH = card.offsetHeight;
+    const limitX = Math.max(0, (cellW - card.offsetWidth) / 2 - 3);
+    const limitY = 4; // 縦はほんの少しだけ(セルが石とほぼ同じ高さのため)
+    let s = socketDrift.get(index);
+    if (!s) {
+      const a = Math.random() * Math.PI * 2;
+      s = { x: (Math.random() * 2 - 1) * limitX * 0.6, y: 0, vx: Math.cos(a) * 11, vy: Math.sin(a) * 7 };
+      socketDrift.set(index, s);
+    }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.x < -limitX) { s.x = -limitX; s.vx = Math.abs(s.vx); }
+    if (s.x > limitX) { s.x = limitX; s.vx = -Math.abs(s.vx); }
+    if (s.y < -limitY) { s.y = -limitY; s.vy = Math.abs(s.vy); }
+    if (s.y > limitY) { s.y = limitY; s.vy = -Math.abs(s.vy); }
+    bounds.push({ card, s, limitX });
+  }
+  // 石同士のぶつかり(同じ行に複数ないので、上下の隣とだけ簡易に反発させる)
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const a = bounds[i], b = bounds[i + 1];
+    const gap = Math.abs((a.s.y + a.card.offsetHeight) - b.s.y);
+    if (gap < 2) { a.s.vy = -Math.abs(a.s.vy); b.s.vy = Math.abs(b.s.vy); }
+  }
+  for (const { card, s } of bounds) {
+    card.style.transform = `translate(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px)`;
+  }
+}
+
 /* ---------- メインループ ---------- */
 const STEP = 1 / 60;
 let accumulator = 0;
@@ -2588,6 +2670,7 @@ function frame(now) {
   render();
   updateThrowTutorial();
   positionAbilityInfo(); // 吹き出しをアンカーの石に追従させる
+  updateSocketDrift(delta); // ソケット内の石がゆっくり滑り続ける遊び
   requestAnimationFrame(frame);
 }
 
@@ -2611,6 +2694,13 @@ function onResize() {
   view.cy = topBar + Rs + 6;
   // ソケットの石をフィールド上の石と同じ大きさにする
   document.documentElement.style.setProperty("--stone-size", `${Math.round(CONFIG.PIECE_RADIUS * 2 * view.scale)}px`);
+  // 背景の格子を「ハウスの格子」に合わせる:間隔は盤上と同じ石の直径、原点はハウス中心。
+  // これで背景の升目と盤面の升目がぴったり重なる。
+  const gridPx = CONFIG.PIECE_RADIUS * 2 * view.scale;
+  const offsetX = ((view.cx % gridPx) + gridPx) % gridPx;
+  const offsetY = ((view.cy % gridPx) + gridPx) % gridPx;
+  document.body.style.backgroundSize = `${gridPx}px ${gridPx}px`;
+  document.body.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
   drawHowToShots();
 }
 window.addEventListener("resize", onResize);
@@ -2867,16 +2957,10 @@ function render() {
       drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideSelf);
     }
 
-    // アンカーとデッドゾーン
+    // デッドゾーンの小さい円は分かりづらいので表示しない。
+    // 引っ張りの線は、狙いの線とズレないよう「石の中心」から指へ伸ばす。
     ctx.beginPath();
-    ctx.arc(a.p0x, a.p0y, CONFIG.AIM_DEADZONE, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(74,33,51,0.3)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // アンカー→指の線
-    ctx.beginPath();
-    ctx.moveTo(a.p0x, a.p0y);
+    ctx.moveTo(launchBase.x, launchBase.y);
     ctx.lineTo(a.fx, a.fy);
     ctx.strokeStyle = "rgba(74,33,51,0.52)";
     ctx.lineWidth = 2;
@@ -3323,8 +3407,8 @@ function drawHowToShots() {
     } else if (scene === "blank") {
       house(w * .5, h * .5, 34); label("ぶらんくっ！", w * .5, h * .5, "#e91e63", 15); label("BONUS", w * .5, h * .78, "#4a2133", 10);
     } else if (scene === "stones") {
-      stone(w * .22, h * .4, "🐭", false, 14); stone(w * .5, h * .4, "🐔", false, 11); stone(w * .78, h * .4, "🐶", false, 17);
-      label("直進", w * .22, h * .78, "#4a2133", 9); label("ガイド", w * .5, h * .78, "#4a2133", 9); label("大型", w * .78, h * .78, "#4a2133", 9);
+      stone(w * .22, h * .4, "🐍", false, 14); stone(w * .5, h * .4, "🐔", false, 14); stone(w * .78, h * .4, "🐶", false, 17);
+      label("カーブ", w * .22, h * .78, "#4a2133", 9); label("飛びやすい", w * .5, h * .78, "#4a2133", 9); label("大きい", w * .78, h * .78, "#4a2133", 9);
     } else if (scene === "enemies") {
       stone(w * .22, h * .42, "🐻", true, 15); stone(w * .5, h * .42, "🦁", true, 15); stone(w * .78, h * .42, "🐊", true, 15); label("それぞれ違う動き", w * .5, h * .8, "#e91e63", 11);
     }
@@ -3382,7 +3466,7 @@ function buildCharacterBookPages() {
     for (const character of group.items) {
       const card = document.createElement("article");
       card.className = "characterCard" + (group.enemy ? " enemy" : "");
-      const title = group.enemy ? `${character.name}／${character.sin}` : character.name;
+      const title = character.name; // 大罪の表記は出さない
       const evolvedTrait = group.enemy ? null : EVOLVE_TRAIT_TEXT[character.id];
       card.innerHTML = `<div class="characterCardIcon">${character.icon}</div>`
         + `<div class="characterCardName">${title}</div>`
@@ -3483,6 +3567,19 @@ bindCharacterBook();
 bindSoundButton();
 bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
 buildSurvivalGame();
+// ダブルタップ拡大・ピンチズームを無効化(メタタグだけではiOSで防げないため)
+document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
+document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
+document.addEventListener("gestureend", (e) => e.preventDefault(), { passive: false });
+document.addEventListener("touchstart", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+let lastTouchEndAt = 0;
+document.addEventListener("touchend", (e) => {
+  const now = Date.now();
+  if (now - lastTouchEndAt <= 320) e.preventDefault(); // ダブルタップ拡大の抑止
+  lastTouchEndAt = now;
+}, { passive: false });
+document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
+
 window.addEventListener("touchstart", unlockAudio, { capture: true, passive: true });
 window.addEventListener("pointerdown", unlockAudio, { capture: true, passive: true });
 window.addEventListener("click", unlockAudio, { capture: true, passive: true });
