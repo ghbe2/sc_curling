@@ -356,6 +356,13 @@
     font-size: 13px; line-height: 1; border-radius: 8px;
   }
   .howToLead { margin: 11px 14px 4px; text-align: center; color: #e91e63; font-size: 12px; }
+  /* ⑧⑨からキャラ性能へ飛ぶ導線 */
+  .howToBookLink {
+    display: block; width: 100%; margin-top: 6px; padding: 5px 4px;
+    border: 1px solid #f48fb1; border-radius: 8px;
+    background: #fff0f5; color: #e91e63;
+    font: 10px 'DotGothic16', sans-serif; cursor: pointer;
+  }
   .howToPage { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 8px; }
   .howToPage.active { display: grid; }
   .howToCard { overflow: hidden; border: 1px solid #f5b0c8; border-radius: 13px; background: white; box-shadow: 0 3px 10px rgba(80,30,50,0.08); }
@@ -432,6 +439,7 @@
 <div id="handBar" aria-label="キャラストーン手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
+    <span id="scoreRankRow"><span class="label">ランク</span><span id="rankText">🌱 ルーキー</span></span>
     <span id="scoreTurnRow"><span class="label">ターン</span><span id="turnTextVisible">1</span></span>
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
@@ -469,8 +477,8 @@
     </div>
     <div class="howToPage" data-page="2">
       <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑦ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>カーブのしやすさ、あたったときの飛びやすさ、止まりやすさなど。同じ石を重ねると合体して強くなるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>石をタップすると能力が見られるよ。動きをよく見よう。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>カーブのしやすさ、あたったときの飛びやすさ、止まりやすさなど。同じ石を重ねると合体して強くなるよ。<button type="button" class="howToBookLink">キャラ性能を見る</button></div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>石をタップすると能力が見られるよ。動きをよく見よう。<button type="button" class="howToBookLink">キャラ性能を見る</button></div></article>
     </div>
     <div class="howToPager"><button class="btn" id="howToPrev">まえ</button><span id="howToPageLabel">● ○ ○</span><button class="btn" id="howToNext">つぎ</button></div>
   </div>
@@ -519,6 +527,16 @@ const CONFIG = {
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 100,       // 1生存ターンあたりの得点
   SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
+  SCORE_THROUGH_PENALTY: 120, // スルー(何にも当たらずハウスも素通り)の減点
+  // 生き残ったターン数のランク(ダブルスイカ的な、ぱっと分かる目標)。到達した最大のものを表示する
+  TURN_RANKS: [
+    { turn: 1,  name: "ルーキー",     icon: "🌱" },
+    { turn: 5,  name: "みならい",     icon: "🥉" },
+    { turn: 10, name: "スイーパー",   icon: "🥈" },
+    { turn: 20, name: "スキップ",     icon: "🥇" },
+    { turn: 30, name: "アイスの支配者", icon: "👑" },
+    { turn: 50, name: "しゅがけ神",   icon: "🏆" },
+  ],
   SCORE_BOARD_MAX: 100,  // 自石1個が中心にある場合の盤面支配点
   FRICTION: 0.985,       // 高速域の基本速度減衰率
   ROLLING_RESISTANCE: 0.03, // 毎フレーム一定量を引き、低速ほど相対的に強く減速させる
@@ -716,6 +734,8 @@ const game = {
   chainCountThisThrow: 0,
   raiseTakeThisThrow: false,
   buttonDrawThisThrow: false,
+  passedThroughPort: false, // 石と石の間を通した(スルー・ザ・ポート)
+  guardBeforeShot: false,   // 投球前、ハウス手前にガードがあったか(カム・アラウンド判定用)
   toastTimer: 0,
   toastQueue: [],
   shakeMag: 0,   // 画面揺れの現在量(px)
@@ -746,6 +766,7 @@ const game = {
     waveBonus: 0,
     noteBonus: 0,
     characterBonus: 0,
+    throughPenalty: 0,
   },
   noteHits: 0,
   noteBonusAwardedThisThrow: false,
@@ -793,7 +814,7 @@ const CHARACTERS = [
 // 合体進化(1段階のみ)。ランチャーに置いた石へ同じ石を重ねると、その石の効果が進化する。
 // ミナリ=小さくなる/ベルペット=大きくなる(ユーザー指定)。他は主効果を強化。throwPieceで適用。
 const EVOLVE_MODS = {
-  minari:    { pathCurveMult: 0.06, radiusScale: 0.62 }, // さらに曲がらず小さく(針の穴ショット)
+  minari:    { pathCurveMult: 0.06 },             // さらに曲がらない(小型化は廃止)
   aune:      { pathCurveMult: 1.8, radiusScale: 0.78 },  // さらに曲がって小さく(2.6→1.8、盤外飛び出し抑制)
   yuunarina: { knockResist: 2.1, restitution: 0.22 },    // 飛びやすさ+弾く(レイズテイク向き)
   mayuu:     { scoreMult: 3 },                    // 得点3倍
@@ -1343,6 +1364,8 @@ function buildSurvivalGame() {
   game.score.waveBonus = 0;
   game.score.noteBonus = 0;
   game.score.characterBonus = 0;
+  game.score.throughPenalty = 0;
+  game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.noteHits = 0;
   game.noteBonusAwardedThisThrow = false;
   game.hitStopFrames = 0;
@@ -1708,6 +1731,11 @@ function throwPiece(params) {
   game.chainCountThisThrow = 0;
   game.raiseTakeThisThrow = false;
   game.buttonDrawThisThrow = false;
+  game.passedThroughPort = false;
+  // カム・アラウンド判定用:投球前にハウス手前(投げる側)にガードがあったかを覚えておく
+  game.guardBeforeShot = game.pieces.some(g =>
+    g !== p && g.state === "onboard" && g.y > CONFIG.HOUSE_RADIUS * 0.5 &&
+    Math.hypot(g.x, g.y) < CONFIG.HOUSE_RADIUS * 2.2);
   game.noteHits = 0;
   game.noteBonusAwardedThisThrow = false;
   game.fastForward = 1; // 新しい投球の滑走は通常速度から始める(早送りは止まりかけで自動的にかかる)
@@ -1923,9 +1951,13 @@ function showGameOver(enemy) {
   game.aim = null;
   const score = calculateScore();
   // A対応:「〇〇が居座った」の説明文は不要。スコア(と到達ターン)を主役にする
+  const rank = currentTurnRank(score.survivedTurns);
+  const next = nextTurnRank(score.survivedTurns);
   document.getElementById("gameOverText").innerHTML =
     `<div style="font-size:26px;font-weight:800;opacity:1;color:#ffe36e;margin-bottom:4px;">SCORE ${score.total}</div>` +
-    `<div style="font-size:13px;opacity:0.85;">到達ターン ${game.turn}</div>`;
+    `<div style="font-size:16px;margin-bottom:3px;">${rank.icon} ${rank.name}</div>` +
+    `<div style="font-size:13px;opacity:0.85;">到達ターン ${game.turn}</div>` +
+    (next ? `<div style="font-size:11px;opacity:0.7;margin-top:4px;">つぎは ${next.turn}ターンで「${next.name}」</div>` : "");
   document.getElementById("gameOver").classList.add("show");
   renderHand();
 }
@@ -1992,6 +2024,37 @@ function startEnemyAdvance() {
   game.phase = "enemyMoving";
   game.fastForward = 1;
   renderHand();
+}
+
+// スルー・ザ・ポート判定:投げた石が、近くにある2つの石の「間」を通り抜けたら成立。
+// 2つの石の中点付近を、両者を結ぶ線をまたいで通過した瞬間を捉える。
+function detectPortPass(shot) {
+  const others = game.pieces.filter(o => o.state === "onboard" && o !== shot);
+  const shotR = pieceRadius(shot);
+  for (let i = 0; i < others.length; i++) {
+    for (let j = i + 1; j < others.length; j++) {
+      const a = others[i], b = others[j];
+      const gapX = b.x - a.x, gapY = b.y - a.y;
+      const gap = Math.hypot(gapX, gapY);
+      // すき間が石2個ぶんも空いていたら「ポート」とは呼ばない。狭すぎる所も除外
+      const needed = pieceRadius(a) + pieceRadius(b) + shotR * 2;
+      if (gap > needed + shotR * 2.2 || gap < needed * 0.72) continue;
+      const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+      // 中点にどれだけ近いか(ゲートの幅の内側にいるか)
+      if (Math.hypot(shot.x - midX, shot.y - midY) > gap / 2) continue;
+      // 2石を結ぶ線のどちら側にいるか。前フレームと符号が変われば「またいだ」
+      const nx = -gapY / gap, ny = gapX / gap;
+      const side = (shot.x - midX) * nx + (shot.y - midY) * ny;
+      const key = `${a.uid}:${b.uid}`;
+      const prev = shot.portSides?.get(key);
+      if (!shot.portSides) shot.portSides = new Map();
+      shot.portSides.set(key, side);
+      if (prev !== undefined && Math.sign(prev) !== Math.sign(side) && !shot.hasCollided) {
+        game.passedThroughPort = true;
+        return;
+      }
+    }
+  }
 }
 
 function handleAllPiecesSettled() {
@@ -2157,6 +2220,9 @@ function physicsStep() {
 
       p.x += p.vx * k;
       p.y += p.vy * k;
+
+      // スルー・ザ・ポート:投げた石が、2つの石のすき間を当たらずに通り抜けたら記録する
+      if (p.isCurrentShot && !game.passedThroughPort) detectPortPass(p);
 
       // 見た目の回転:回転付きの石は spinRatePerFrame(実1秒あたりの回転数)で自転する。
       // これはTIME_SCALEを含む「シミュレーション時間」ではなく実時間基準の一定レートなので、
@@ -2460,11 +2526,44 @@ function showChainToast(n) {
   if (names[n]) showScoreEvent(names[n]);
 }
 
+// ショットの呼称。優先度の高いもの1件だけを出す。
+// トリプル＞ダブル＞レイズ＞カムアラウンド＞ティー(ボタンドロー)＞フリーズ＞テイク
+// ＞スルー・ザ・ポート＞インプレイ＞スルー(減点)
 function showBestShotResult() {
+  const shot = game.pieces.find(p => p.isCurrentShot && p.state === "onboard");
+  const shotR = shot ? Math.hypot(shot.x, shot.y) : Infinity;
+
+  // フリーズ:相手(敵)の石のすぐ手前にぴたりと止まった
+  let freeze = false;
+  if (shot && shot.hasCollided === false) {
+    for (const e of game.pieces) {
+      if (e.role !== "enemy" || e.state !== "onboard") continue;
+      const d = Math.hypot(e.x - shot.x, e.y - shot.y);
+      const touching = pieceRadius(e) + pieceRadius(shot);
+      if (d <= touching * 1.35 && shotR > CONFIG.HOUSE_RADIUS / 12) { freeze = true; break; }
+    }
+  }
+  // スルー:何にも当たらず、ハウスも素通りして奥へ行ってしまった(マイナス点)
+  const through = Boolean(shot === undefined || (shot && !shot.hasCollided && shotR > CONFIG.HOUSE_RADIUS))
+    && game.chainCountThisThrow === 0 && !game.passedThroughPort
+    && !(shot && shot.entered && shotR <= CONFIG.HOUSE_RADIUS);
+  // インプレイ:自分の石がハウスに残った
+  const inPlay = game.pieces.some(p => p.role === "player" && p.state === "onboard" &&
+    Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
+
   if (game.chainCountThisThrow >= 3) showChainToast(3);
   else if (game.chainCountThisThrow >= 2) showChainToast(2);
   else if (game.raiseTakeThisThrow) showScoreEvent("れいずていくっ！");
-  else if (game.buttonDrawThisThrow) showScoreEvent("ぼたんどろーっ！");
+  else if (game.buttonDrawThisThrow && game.guardBeforeShot) showScoreEvent("かむ・あらうんどっ！");
+  else if (game.buttonDrawThisThrow) showScoreEvent("てぃーしょっとっ！");
+  else if (freeze) showScoreEvent("ふりーずっ！");
+  else if (game.chainCountThisThrow >= 1) showScoreEvent("ていくあうとっ！");
+  else if (game.passedThroughPort) showScoreEvent("するー・ざ・ぽーとっ！");
+  else if (inPlay) showScoreEvent("いんぷれい！");
+  else if (through) {
+    showScoreEvent("するー…");
+    game.score.throughPenalty = (game.score.throughPenalty ?? 0) + CONFIG.SCORE_THROUGH_PENALTY;
+  }
 }
 
 function showScoreEvent(text) {
@@ -3239,6 +3338,17 @@ function calculateBoardControl() {
   return Math.round(value);
 }
 
+// 生き残ったターン数から現在のランクを求める(到達済みで最大のもの)
+function currentTurnRank(turns) {
+  let rank = CONFIG.TURN_RANKS[0];
+  for (const r of CONFIG.TURN_RANKS) if (turns >= r.turn) rank = r;
+  return rank;
+}
+// 次のランクまでの残りターン(最高位なら null)
+function nextTurnRank(turns) {
+  return CONFIG.TURN_RANKS.find(r => turns < r.turn) ?? null;
+}
+
 function calculateScore() {
   const survivedTurns = Math.max(0, game.turn - 1);
   const survival = survivedTurns * CONFIG.SCORE_TURN;
@@ -3247,7 +3357,9 @@ function calculateScore() {
   const waveBonus = game.score.waveBonus;
   const noteBonus = game.score.noteBonus;
   const characterBonus = game.score.characterBonus;
-  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, characterBonus, total: survival + takeout + board + waveBonus + noteBonus + characterBonus };
+  const throughPenalty = game.score.throughPenalty ?? 0; // スルーの減点(合計は0未満にしない)
+  const total = Math.max(0, survival + takeout + board + waveBonus + noteBonus + characterBonus - throughPenalty);
+  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, characterBonus, throughPenalty, total };
 }
 
 function updateDangerAlert() {
@@ -3281,6 +3393,16 @@ function updateHUD() {
   // 経過ターンを毎回反映。#hudは非表示なので、スコアパネル内の可視ターン表示を更新する。
   const turnVis = document.getElementById("turnTextVisible");
   if (turnVis) turnVis.textContent = game.turn;
+  // 生存ターン数のランク。上がった瞬間だけ演出を出す
+  const rank = currentTurnRank(score.survivedTurns);
+  const rankEl = document.getElementById("rankText");
+  if (rankEl) rankEl.textContent = `${rank.icon} ${rank.name}`;
+  if (game.lastRankName !== rank.name) {
+    if (game.lastRankName !== undefined && game.lastRankName !== null) {
+      showScoreEvent(`${rank.icon} ${rank.name}に しょうかく！`);
+    }
+    game.lastRankName = rank.name;
+  }
   const turnEl = document.getElementById("turnText");
   if (turnEl) turnEl.textContent = game.turn;
   const waveEl = document.getElementById("waveText");
@@ -3494,6 +3616,14 @@ function bindHowTo() {
   nextButton.addEventListener("click", (e) => {
     e.stopPropagation();
     if (page < 2) { page++; renderPage(); } else { close(); }
+  });
+  // ⑧⑨の「キャラ性能を見る」から、遊び方を閉じてキャラ性能を開く
+  overlay.querySelectorAll(".howToBookLink").forEach((link) => {
+    link.addEventListener("pointerdown", (e) => {
+      e.stopPropagation(); e.preventDefault();
+      close();
+      document.getElementById("characterBookBtn")?.click();
+    });
   });
   // パネルの外(オーバーレイの余白)を触ったら閉じる
   overlay.addEventListener("pointerdown", (e) => {
