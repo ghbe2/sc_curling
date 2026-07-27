@@ -65,7 +65,9 @@
   /* 手札は「フィールド上のストーンと同じ見た目」に:白い円＋濃い輪郭＋絵文字(キャラ色は出さない)。
      ソケット(手札パネル)は氷のように暗くして、石が浮かんで見えるようにする。 */
   .handCard {
-    position: relative; height: 100%; aspect-ratio: 1 / 1; margin: 0 auto; padding: 0;
+    /* サイズはフィールド上の石と同じ(--stone-size を onResize で view.scale から更新) */
+    position: relative; width: var(--stone-size, 40px); height: var(--stone-size, 40px);
+    margin: 0 auto; padding: 0; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
     border: 2px solid rgba(0,0,0,0.34); border-radius: 50%;
     color: #222;
@@ -73,7 +75,9 @@
     box-shadow: 0 2px 7px rgba(0,0,0,0.35);
     touch-action: manipulation;
   }
-  .handCard .icon { display: block; font-size: 26px; line-height: 1; }
+  .handCard .icon { display: block; font-size: calc(var(--stone-size, 40px) * 0.62); line-height: 1; }
+  /* 運搬中は、その石はソケットから物理的に持ち出されているので受け皿を空にする */
+  .handCard.carrying { visibility: hidden; }
   /* フィールド上の待機石と同じく、ソケットの石もゆっくり揺れる(個体ごとに位相をずらす) */
   .handCard { animation: stoneWobble 2.6s ease-in-out infinite; }
   .handCard[data-index="1"] { animation-delay: -0.65s; }
@@ -144,18 +148,27 @@
   @keyframes pinchPulse { from { transform: translateX(-50%) scale(0.96); } to { transform: translateX(-50%) scale(1.05); } }
   /* 能力説明:枠なし。上端をチュートリアル/ソケットと揃え、その間の中央に出す。
      置いている石の能力は消えずに出続け、狙い始めるか敵タップで上書き/非表示になる。 */
+  /* 能力説明は石の絵文字の上に出る吹き出し(キャラのグラフィック導入を想定したデザイン) */
   #abilityInfo {
-    position: fixed; left: 50%; top: calc(100% - 320px); z-index: 9;
-    transform: translateX(-50%) translateY(4px);
-    width: calc(100vw - var(--side-panel-width) * 2 - 34px); max-width: 260px;
-    color: #4a2133; text-shadow: 0 2px 0 rgba(255,255,255,0.95), 0 0 10px rgba(255,255,255,0.9);
+    position: fixed; left: 50%; top: 50%; z-index: 9;
+    transform: translate(-50%, -100%) scale(0.94);
+    transform-origin: 50% 100%;
+    max-width: min(230px, 68vw); padding: 7px 12px 8px; border-radius: 13px;
+    background: rgba(255,255,255,0.97); color: #4a2133;
+    box-shadow: 0 4px 14px rgba(80,30,50,0.25);
     font-family: 'DotGothic16', system-ui, sans-serif; text-align: center; pointer-events: none;
-    opacity: 0; transition: opacity 0.18s, transform 0.18s;
+    opacity: 0; transition: opacity 0.16s, transform 0.16s;
   }
-  #abilityInfo.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  #abilityInfo.enemy { color: #7e1330; }
-  #abilityInfo .abilityIcon { font-size: 32px; line-height: 1; }
-  #abilityInfo .abilityName { font-size: 15px; font-weight: 900; margin-top: 2px; }
+  #abilityInfo.show { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  /* 吹き出しのしっぽ(下向き三角) */
+  #abilityInfo::after {
+    content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -7px;
+    border-left: 7px solid transparent; border-right: 7px solid transparent;
+    border-top: 8px solid rgba(255,255,255,0.97);
+  }
+  #abilityInfo.enemy { background: rgba(32,22,36,0.97); color: #ffe1ea; }
+  #abilityInfo.enemy::after { border-top-color: rgba(32,22,36,0.97); }
+  #abilityInfo .abilityName { font-size: 13px; font-weight: 900; }
   #abilityInfo .abilityTrait { font-size: 11px; margin-top: 3px; line-height: 1.35; }
   #hint {
     display: none;
@@ -333,6 +346,11 @@
   .characterCardName { color: #e91e63; font-size: 12px; font-weight: 700; }
   .characterCard.enemy .characterCardName { color: #ff8eb5; }
   .characterCardTrait { font: 10px/1.35 system-ui, sans-serif; overflow-wrap: anywhere; }
+  /* 味方カードはタップで進化前/後を切り替えられる */
+  .characterCard.switchable { cursor: pointer; }
+  .characterCardHint { margin-top: 2px; font: 8px system-ui, sans-serif; color: #e91e63; opacity: 0.75; }
+  .characterCard.evolved { border-color: #ffcf33; background: #fffaf0; box-shadow: 0 0 0 2px rgba(255,207,51,0.45); }
+  .characterCard.evolved .characterCardName { color: #b8860b; }
   .characterBookPager { display: grid; grid-template-columns: 78px 1fr 78px; align-items: center; gap: 8px; padding: 9px 11px 11px; border-top: 1px solid #f7bfd1; }
   #characterBookPageLabel { text-align: center; color: #e91e63; font-size: 12px; }
   #characterBookPrev:disabled { opacity: .35; }
@@ -866,14 +884,41 @@ function evolvedTraitText(character) {
 
 // 能力説明を表示(置いた石/タップした敵)。時間では消えず、
 // 「石に触れて狙いを始める」か「別の石(敵)をタップして上書き」されたときだけ消える。
-function showAbilityInfo(icon, name, trait, isEnemy) {
+// anchorPiece を渡すと、その石の絵文字の上に吹き出しで表示する(キャラのグラフィック導入を想定)。
+// 渡さない場合は、投球位置の石(=これから投げる石)の上に出す。
+function showAbilityInfo(icon, name, trait, isEnemy, anchorPiece = null) {
   const el = document.getElementById("abilityInfo");
   if (!el) return;
   el.className = "show" + (isEnemy ? " enemy" : "");
-  el.innerHTML = `<div class="abilityIcon">${icon ?? ""}</div><div class="abilityName">${name ?? ""}</div><div class="abilityTrait">${trait ?? ""}</div>`;
+  el.innerHTML = `<div class="abilityName">${name ?? ""}</div><div class="abilityTrait">${trait ?? ""}</div>`;
+  game.abilityAnchor = anchorPiece ? { uid: anchorPiece.uid } : { launcher: true };
+  positionAbilityInfo();
+}
+
+// 吹き出しをアンカー(盤上の石/投球位置の石)の真上へ配置する。毎フレーム呼んで追従させる。
+function positionAbilityInfo() {
+  const el = document.getElementById("abilityInfo");
+  if (!el || !el.classList.contains("show") || !game.abilityAnchor) return;
+  let sx, sy, r;
+  if (game.abilityAnchor.launcher) {
+    const lp = launcherPos();
+    const s = toScreen(lp.x, lp.y);
+    const character = game.selectedHandIndex === null ? null : game.hand[game.selectedHandIndex];
+    const scale = (game.stagedEvolved && character ? EVOLVE_MODS[character.id]?.radiusScale : null)
+      ?? character?.mods?.radiusScale ?? 1;
+    sx = s.x; sy = s.y; r = CONFIG.PIECE_RADIUS * scale * view.scale;
+  } else {
+    const piece = game.pieces.find(p => p.uid === game.abilityAnchor.uid && p.state === "onboard");
+    if (!piece) { hideAbilityInfo(); return; }
+    const s = toScreen(piece.x, piece.y);
+    sx = s.x; sy = s.y; r = pieceRadius(piece) * view.scale;
+  }
+  el.style.left = `${Math.round(sx)}px`;
+  el.style.top = `${Math.round(sy - r - 10)}px`; // 石の上端の少し上に吹き出しの尻尾が来る
 }
 function hideAbilityInfo() {
   document.getElementById("abilityInfo")?.classList.remove("show");
+  game.abilityAnchor = null;
 }
 
 function renderHand() {
@@ -893,7 +938,9 @@ function renderHand() {
     }
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "handCard" + (index === game.selectedHandIndex ? " selected" : "") + (index === game.refillHandIndex ? " entering" : "");
+    button.className = "handCard" + (index === game.selectedHandIndex ? " selected" : "")
+      + (index === game.refillHandIndex ? " entering" : "")
+      + (game.carry && game.carry.index === index ? " carrying" : "");
     button.dataset.index = String(index);
     button.dataset.characterId = character.id;
     button.dataset.speedMult = String(character.mods.speedMult ?? 1);
@@ -914,18 +961,21 @@ function renderHand() {
       e.preventDefault();
       if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
       game.carry = { index, character, x: e.clientX, y: e.clientY };
+      button.classList.add("carrying"); // 掴んだ瞬間からソケットの受け皿は空になる(物理的に持ち出す)
       try { button.setPointerCapture?.(e.pointerId); } catch (_) {}
       const move = (ev) => { if (game.carry) { game.carry.x = ev.clientX; game.carry.y = ev.clientY; } };
       const up = (ev) => {
         button.removeEventListener("pointermove", move);
         button.removeEventListener("pointerup", up);
         button.removeEventListener("pointercancel", up);
+        button.classList.remove("carrying");
         const dropX = ev?.clientX ?? game.carry?.x, dropY = ev?.clientY ?? game.carry?.y;
         game.carry = null;
         // 掴んで「下の◯(投球位置)」まで運んだときだけ置く/合体。タップだけでは置かない。
         const ls = toScreen(launcherPos().x, launcherPos().y);
         const dropRadius = Math.min(window.innerWidth, window.innerHeight) * 0.45;
         if (Math.hypot(dropX - ls.x, dropY - ls.y) <= dropRadius) activateHandCard(index);
+        else renderHand(); // 運ばなかった石はソケットへ戻す
       };
       button.addEventListener("pointermove", move);
       button.addEventListener("pointerup", up);
@@ -1302,11 +1352,11 @@ function startAim(pointerId, px0, py0) {
   updateSideInfoVisibility();
 }
 
-// 画面座標(sx,sy)にある敵ピースを返す(なければnull)。敵タップの能力表示用。
-function enemyAt(sx, sy) {
+// 画面座標(sx,sy)にある盤上の石を返す(なければnull)。敵・味方どちらもタップで能力を出せる。
+function pieceAt(sx, sy) {
   let best = null, bestD = Infinity;
   for (const p of game.pieces) {
-    if (p.role !== "enemy" || p.state !== "onboard") continue;
+    if (p.state !== "onboard") continue;
     const s = toScreen(p.x, p.y);
     const r = pieceRadius(p) * view.scale;
     const d = Math.hypot(sx - s.x, sy - s.y);
@@ -2537,6 +2587,7 @@ function frame(now) {
   updateSlideSound();
   render();
   updateThrowTutorial();
+  positionAbilityInfo(); // 吹き出しをアンカーの石に追従させる
   requestAnimationFrame(frame);
 }
 
@@ -2558,6 +2609,8 @@ function onResize() {
   view.scale = Rs / CONFIG.BOARD_RADIUS;
   view.cx = w / 2;
   view.cy = topBar + Rs + 6;
+  // ソケットの石をフィールド上の石と同じ大きさにする
+  document.documentElement.style.setProperty("--stone-size", `${Math.round(CONFIG.PIECE_RADIUS * 2 * view.scale)}px`);
   drawHowToShots();
 }
 window.addEventListener("resize", onResize);
@@ -2951,10 +3004,11 @@ function render() {
   // 手札から掴んで運んでいる最中の石を指の位置に描く(「掴んで持ってくる」演出)
   if (game.carry) {
     const c = game.carry;
-    const rr = CONFIG.PIECE_RADIUS * (c.character.mods.radiusScale ?? 1) * view.scale * 0.92;
+    // フィールド上と同じ実寸で描く(指の位置=石の中心)
+    const rr = CONFIG.PIECE_RADIUS * (c.character.mods.radiusScale ?? 1) * view.scale;
     ctx.save();
-    ctx.globalAlpha = 0.92;
-    drawPiece(c.x, c.y - rr * 0.6, rr, c.character.color ?? ROLE_COLOR.player, 0, 1, c.character.mods.partType, c.character.icon);
+    ctx.globalAlpha = 0.95;
+    drawPiece(c.x, c.y, rr, c.character.color ?? ROLE_COLOR.player, 0, 1, c.character.mods.partType, c.character.icon);
     ctx.restore();
   }
 }
@@ -3100,11 +3154,19 @@ function updateHUD() {
 window.addEventListener("pointerdown", (e) => {
   if (e.target.closest("#scenarioBar") || e.target.closest("#handBar") || e.target.closest("#sideInfo") || e.target.closest("#throwTutorial")) return;
   if (game.phase !== "aim" || game.gameOver) return;
-  // 敵をタップしたら能力説明を出す(石を置いていなくても確認できる)。敵の上からは照準を始めない。
-  const enemy = enemyAt(e.clientX, e.clientY);
-  if (enemy) {
-    const meta = ENEMIES.find((en) => en.id === enemy.enemyId);
-    showAbilityInfo(enemy.enemyIcon ?? enemy.icon, enemy.enemyName ?? meta?.name ?? "敵", meta?.trait ?? "", true);
+  // 盤上の石(敵・味方どちらも)をタップしたら能力説明を吹き出しで出す。石の上からは照準を始めない。
+  const tapped = pieceAt(e.clientX, e.clientY);
+  if (tapped) {
+    if (tapped.role === "enemy") {
+      const meta = ENEMIES.find((en) => en.id === tapped.enemyId);
+      showAbilityInfo(tapped.enemyIcon ?? tapped.icon, tapped.enemyName ?? meta?.name ?? "敵",
+        meta?.trait ?? "", true, tapped);
+    } else {
+      const meta = CHARACTERS.find((c) => c.id === tapped.characterId);
+      const trait = tapped.evolved ? (EVOLVE_TRAIT_TEXT[tapped.characterId] ?? meta?.trait ?? "") : (meta?.trait ?? "");
+      showAbilityInfo(tapped.icon, (tapped.characterName ?? meta?.name ?? "味方") + (tapped.evolved ? " ★" : ""),
+        trait, false, tapped);
+    }
     return;
   }
   if (game.aim !== null || !game.launcherReady || game.selectedHandIndex === null) return;
@@ -3321,7 +3383,24 @@ function buildCharacterBookPages() {
       const card = document.createElement("article");
       card.className = "characterCard" + (group.enemy ? " enemy" : "");
       const title = group.enemy ? `${character.name}／${character.sin}` : character.name;
-      card.innerHTML = `<div class="characterCardIcon">${character.icon}</div><div class="characterCardName">${title}</div><div class="characterCardTrait">${character.trait}</div>`;
+      const evolvedTrait = group.enemy ? null : EVOLVE_TRAIT_TEXT[character.id];
+      card.innerHTML = `<div class="characterCardIcon">${character.icon}</div>`
+        + `<div class="characterCardName">${title}</div>`
+        + `<div class="characterCardTrait">${character.trait}</div>`
+        + (evolvedTrait ? `<div class="characterCardHint">タップで合体後</div>` : "");
+      // 味方カードはタップで「進化前 ⇄ 進化後」を切り替える
+      if (evolvedTrait) {
+        let showEvolved = false;
+        card.classList.add("switchable");
+        card.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          showEvolved = !showEvolved;
+          card.classList.toggle("evolved", showEvolved);
+          card.querySelector(".characterCardName").textContent = showEvolved ? `${title} ★` : title;
+          card.querySelector(".characterCardTrait").textContent = showEvolved ? evolvedTrait : character.trait;
+          card.querySelector(".characterCardHint").textContent = showEvolved ? "タップで合体前" : "タップで合体後";
+        });
+      }
       page.appendChild(card);
     }
     container.appendChild(page);
