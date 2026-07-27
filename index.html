@@ -386,9 +386,41 @@
   }
   .characterBookHeader { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f7bfd1; }
   .characterBookHeader h2 { margin: 0; color: #e91e63; font-size: 19px; }
-  #characterBookLead { flex: 1; margin: 0 8px; color: #a1607a; font: 10px 'DotGothic16', sans-serif; text-align: right; }
+  #characterBookLead, #trickBookLead { flex: 1; margin: 0 8px; color: #a1607a; font: 10px 'DotGothic16', sans-serif; text-align: right; }
+  /* 敵ページでは「タップして合体後」の案内を隠す(合体するのは味方だけ) */
+  #characterBookLead.hidden { visibility: hidden; }
+  /* トリック一覧 */
+  #trickBookOverlay {
+    position: fixed; inset: 0; z-index: 41; display: none; align-items: center; justify-content: center;
+    padding: 12px; box-sizing: border-box; background: rgba(43,31,36,.74); touch-action: none;
+  }
+  #trickBookOverlay.show { display: flex; }
+  #trickBookPanel {
+    width: min(560px, 100%); max-height: calc(100vh - 24px); overflow: hidden; display: flex; flex-direction: column;
+    border: 3px solid #f48fb1; border-radius: 20px; background: #fff8fb;
+    box-shadow: 0 16px 46px rgba(43,31,36,.36); color: #4a2133;
+    font-family: 'DotGothic16', system-ui, sans-serif;
+  }
+  #trickBookList { overflow-y: auto; padding: 8px 9px 10px; display: flex; flex-direction: column; gap: 5px; }
+  .trickRow {
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
+    padding: 6px 9px; border: 1px solid #f5b0c8; border-radius: 11px; background: white;
+  }
+  .trickRow.penalty { border-color: #c9a3b2; background: #f7eef1; }
+  .trickName { color: #e91e63; font-size: 12px; }
+  .trickDesc { grid-column: 1 / -1; font: 10px/1.35 system-ui, sans-serif; opacity: 0.82; }
+  .trickScore { color: #e91e63; font-size: 13px; font-weight: 900; white-space: nowrap; }
+  .trickRow.penalty .trickName, .trickRow.penalty .trickScore { color: #8d5163; }
   .characterBookPage { display: none; height: min(64vh, 470px); grid-template-columns: repeat(3, minmax(0,1fr)); grid-auto-rows: minmax(0,1fr); gap: 7px; padding: 9px; box-sizing: border-box; }
   .characterBookPage.active { display: grid; }
+  /* 敵は7体と半端で3列だと余白が不揃いになるため、横長カードを縦に7つ並べる */
+  .characterBookPage.enemyPage { grid-template-columns: 1fr; grid-auto-rows: 1fr; gap: 5px; }
+  .characterBookPage.enemyPage .characterCard {
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+    column-gap: 9px; row-gap: 1px; place-items: center start; text-align: left; padding: 5px 9px;
+  }
+  .characterBookPage.enemyPage .characterCardIcon { grid-row: 1 / 3; font-size: 24px; }
+  .characterBookPage.enemyPage .characterCardTrait { font-size: 9px; }
   .characterCard { display: grid; place-items: center; align-content: center; gap: 3px; min-width: 0; padding: 5px; border: 1px solid #f5b0c8; border-radius: 12px; background: white; text-align: center; box-shadow: 0 3px 9px rgba(80,30,50,.08); }
   .characterCard.enemy { color: #fff; background: #17131c; border-color: #ff6e9e; }
   .characterCardIcon { font-size: 28px; line-height: 1; }
@@ -432,7 +464,8 @@
 <div id="abilityInfo" aria-live="polite"></div>
 <div id="scenarioBar">
   <button class="btn" id="howToBtn">遊び方</button>
-  <button class="btn" id="characterBookBtn">キャラ性能</button>
+  <button class="btn" id="trickBookBtn">トリック</button>
+  <button class="btn" id="characterBookBtn">キャラクター</button>
 </div>
 <!-- デバッグ用。最終的には削除する -->
 <button class="btn" id="allOutBtn" aria-pressed="false">ぜんぶ出す OFF</button>
@@ -447,9 +480,15 @@
 </div>
 <div id="characterBookOverlay" role="dialog" aria-modal="true" aria-labelledby="characterBookTitle">
   <div id="characterBookPanel">
-    <div class="characterBookHeader"><h2 id="characterBookTitle">キャラ性能</h2><span id="characterBookLead">カードをタップすると合体後の能力</span><button class="btn" id="characterBookClose" aria-label="キャラ性能を閉じる">×</button></div>
+    <div class="characterBookHeader"><h2 id="characterBookTitle">キャラクター</h2><span id="characterBookLead">カードをタップすると合体後の能力</span><button class="btn" id="characterBookClose" aria-label="キャラクターを閉じる">×</button></div>
     <div id="characterBookPages"></div>
     <div class="characterBookPager"><button class="btn" id="characterBookPrev">まえ</button><span id="characterBookPageLabel">味方 1 / 2</span><button class="btn" id="characterBookNext">つぎ</button></div>
+  </div>
+</div>
+<div id="trickBookOverlay" role="dialog" aria-modal="true" aria-labelledby="trickBookTitle">
+  <div id="trickBookPanel">
+    <div class="characterBookHeader"><h2 id="trickBookTitle">トリック</h2><span id="trickBookLead">きめると ボーナス</span><button class="btn" id="trickBookClose" aria-label="トリックを閉じる">×</button></div>
+    <div id="trickBookList"></div>
   </div>
 </div>
 <button class="btn" id="fastForwardBtn">はやおくり</button>
@@ -477,8 +516,8 @@
     </div>
     <div class="howToPage" data-page="2">
       <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑦ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>カーブのしやすさ、あたったときの飛びやすさ、止まりやすさなど。同じ石を重ねると合体して強くなるよ。<button type="button" class="howToBookLink">キャラ性能を見る</button></div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>石をタップすると能力が見られるよ。動きをよく見よう。<button type="button" class="howToBookLink">キャラ性能を見る</button></div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>カーブのしやすさ、あたったときの飛びやすさ、止まりやすさなど。同じ石を重ねると合体して強くなるよ。<button type="button" class="howToBookLink">キャラクターを見る</button></div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>石をタップすると能力が見られるよ。動きをよく見よう。<button type="button" class="howToBookLink">キャラクターを見る</button></div></article>
     </div>
     <div class="howToPager"><button class="btn" id="howToPrev">まえ</button><span id="howToPageLabel">● ○ ○</span><button class="btn" id="howToNext">つぎ</button></div>
   </div>
@@ -528,14 +567,14 @@ const CONFIG = {
   SCORE_TURN: 100,       // 1生存ターンあたりの得点
   SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
   SCORE_THROUGH_PENALTY: 120, // スルー(何にも当たらずハウスも素通り)の減点
-  // 生き残ったターン数のランク(ダブルスイカ的な、ぱっと分かる目標)。到達した最大のものを表示する
-  TURN_RANKS: [
-    { turn: 1,  name: "ルーキー",     icon: "🌱" },
-    { turn: 5,  name: "みならい",     icon: "🥉" },
-    { turn: 10, name: "スイーパー",   icon: "🥈" },
-    { turn: 20, name: "スキップ",     icon: "🥇" },
-    { turn: 30, name: "アイスの支配者", icon: "👑" },
-    { turn: 50, name: "しゅがけ神",   icon: "🏆" },
+  // ランクはスコアで達成する。到達した最大のものを表示する
+  SCORE_RANKS: [
+    { score: 0,     name: "ルーキー",       icon: "🌱" },
+    { score: 1500,  name: "みならい",       icon: "🥉" },
+    { score: 5000,  name: "スイーパー",     icon: "🥈" },
+    { score: 12000, name: "スキップ",       icon: "🥇" },
+    { score: 25000, name: "アイスの支配者", icon: "👑" },
+    { score: 50000, name: "しゅがけ神",     icon: "🏆" },
   ],
   SCORE_BOARD_MAX: 100,  // 自石1個が中心にある場合の盤面支配点
   FRICTION: 0.985,       // 高速域の基本速度減衰率
@@ -766,6 +805,7 @@ const game = {
     waveBonus: 0,
     noteBonus: 0,
     characterBonus: 0,
+    trickBonus: 0,
     throughPenalty: 0,
   },
   noteHits: 0,
@@ -788,6 +828,22 @@ const ENEMIES = [
   { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "ジーナは 敵に、マミは 味方に あたったとき 飛びづらい。" },
   { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵に あたったとき 大きく 重くする。" },
 ];
+
+// トリック(ショットの呼称)の一覧。表示・採点・一覧パネルをこの定義だけで賄う。
+// 上にあるものほど優先(1投につき最上位の1件だけが成立する)。
+const TRICKS = [
+  { id: "triple",     label: "とりぷるていくっ!!!",  name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
+  { id: "double",     label: "だぶるていくっ!!",     name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
+  { id: "raise",      label: "れいずていくっ！",     name: "レイズテイク",       score: 200,  desc: "味方の石を 当てて 間接的に テイク。" },
+  { id: "comeAround", label: "かむ・あらうんどっ！", name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
+  { id: "tee",        label: "てぃーしょっとっ！",   name: "ティーショット",     score: 300,  desc: "何にも 当てずに ボタンの上に 止める。" },
+  { id: "freeze",     label: "ふりーずっ！",         name: "フリーズショット",   score: 250,  desc: "敵の石の すぐ手前に ぴたりと 止める。" },
+  { id: "takeout",    label: "ていくあうとっ！",     name: "テイクアウト",       score: 0,    desc: "敵を ハウスの外へ 出す。(テイク得点は別に入る)" },
+  { id: "port",       label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 200, desc: "石と石の すきまを 当たらずに 通す。" },
+  { id: "inPlay",     label: "いんぷれい！",         name: "インプレイ",         score: 50,   desc: "自分の石が ハウスに 残る。" },
+  { id: "through",    label: "するー…",             name: "スルー",             score: -120, desc: "何にも 当たらず ハウスも 素通り。(減点)" },
+];
+const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
 
 // 能力テキストの表記ルール:
 //  「あてた」= 自分から当たりに行ったとき / 「あたった」= 相手が当たってきたとき
@@ -1364,6 +1420,7 @@ function buildSurvivalGame() {
   game.score.waveBonus = 0;
   game.score.noteBonus = 0;
   game.score.characterBonus = 0;
+  game.score.trickBonus = 0;
   game.score.throughPenalty = 0;
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.noteHits = 0;
@@ -1951,13 +2008,13 @@ function showGameOver(enemy) {
   game.aim = null;
   const score = calculateScore();
   // A対応:「〇〇が居座った」の説明文は不要。スコア(と到達ターン)を主役にする
-  const rank = currentTurnRank(score.survivedTurns);
-  const next = nextTurnRank(score.survivedTurns);
+  const rank = currentScoreRank(score.total);
+  const next = nextScoreRank(score.total);
   document.getElementById("gameOverText").innerHTML =
     `<div style="font-size:26px;font-weight:800;opacity:1;color:#ffe36e;margin-bottom:4px;">SCORE ${score.total}</div>` +
     `<div style="font-size:16px;margin-bottom:3px;">${rank.icon} ${rank.name}</div>` +
     `<div style="font-size:13px;opacity:0.85;">到達ターン ${game.turn}</div>` +
-    (next ? `<div style="font-size:11px;opacity:0.7;margin-top:4px;">つぎは ${next.turn}ターンで「${next.name}」</div>` : "");
+    (next ? `<div style="font-size:11px;opacity:0.7;margin-top:4px;">つぎは ${next.score} てんで「${next.name}」</div>` : "");
   document.getElementById("gameOver").classList.add("show");
   renderHand();
 }
@@ -2551,19 +2608,24 @@ function showBestShotResult() {
   const inPlay = game.pieces.some(p => p.role === "player" && p.state === "onboard" &&
     Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
 
-  if (game.chainCountThisThrow >= 3) showChainToast(3);
-  else if (game.chainCountThisThrow >= 2) showChainToast(2);
-  else if (game.raiseTakeThisThrow) showScoreEvent("れいずていくっ！");
-  else if (game.buttonDrawThisThrow && game.guardBeforeShot) showScoreEvent("かむ・あらうんどっ！");
-  else if (game.buttonDrawThisThrow) showScoreEvent("てぃーしょっとっ！");
-  else if (freeze) showScoreEvent("ふりーずっ！");
-  else if (game.chainCountThisThrow >= 1) showScoreEvent("ていくあうとっ！");
-  else if (game.passedThroughPort) showScoreEvent("するー・ざ・ぽーとっ！");
-  else if (inPlay) showScoreEvent("いんぷれい！");
-  else if (through) {
-    showScoreEvent("するー…");
-    game.score.throughPenalty = (game.score.throughPenalty ?? 0) + CONFIG.SCORE_THROUGH_PENALTY;
-  }
+  // 成立したトリックを優先度順に1件だけ選び、呼称の表示とボーナス加点をまとめて行う
+  let trickId = null;
+  if (game.chainCountThisThrow >= 3) trickId = "triple";
+  else if (game.chainCountThisThrow >= 2) trickId = "double";
+  else if (game.raiseTakeThisThrow) trickId = "raise";
+  else if (game.buttonDrawThisThrow && game.guardBeforeShot) trickId = "comeAround";
+  else if (game.buttonDrawThisThrow) trickId = "tee";
+  else if (freeze) trickId = "freeze";
+  else if (game.chainCountThisThrow >= 1) trickId = "takeout";
+  else if (game.passedThroughPort) trickId = "port";
+  else if (inPlay) trickId = "inPlay";
+  else if (through) trickId = "through";
+
+  if (!trickId) return;
+  const trick = TRICK_BY_ID[trickId];
+  showScoreEvent(trick.score > 0 ? `${trick.label} +${trick.score}` : trick.label);
+  if (trick.score > 0) game.score.trickBonus = (game.score.trickBonus ?? 0) + trick.score;
+  if (trick.score < 0) game.score.throughPenalty = (game.score.throughPenalty ?? 0) + (-trick.score);
 }
 
 function showScoreEvent(text) {
@@ -3338,15 +3400,15 @@ function calculateBoardControl() {
   return Math.round(value);
 }
 
-// 生き残ったターン数から現在のランクを求める(到達済みで最大のもの)
-function currentTurnRank(turns) {
-  let rank = CONFIG.TURN_RANKS[0];
-  for (const r of CONFIG.TURN_RANKS) if (turns >= r.turn) rank = r;
+// スコアから現在のランクを求める(到達済みで最大のもの)
+function currentScoreRank(total) {
+  let rank = CONFIG.SCORE_RANKS[0];
+  for (const r of CONFIG.SCORE_RANKS) if (total >= r.score) rank = r;
   return rank;
 }
-// 次のランクまでの残りターン(最高位なら null)
-function nextTurnRank(turns) {
-  return CONFIG.TURN_RANKS.find(r => turns < r.turn) ?? null;
+// 次のランク(最高位なら null)
+function nextScoreRank(total) {
+  return CONFIG.SCORE_RANKS.find(r => total < r.score) ?? null;
 }
 
 function calculateScore() {
@@ -3357,9 +3419,10 @@ function calculateScore() {
   const waveBonus = game.score.waveBonus;
   const noteBonus = game.score.noteBonus;
   const characterBonus = game.score.characterBonus;
-  const throughPenalty = game.score.throughPenalty ?? 0; // スルーの減点(合計は0未満にしない)
-  const total = Math.max(0, survival + takeout + board + waveBonus + noteBonus + characterBonus - throughPenalty);
-  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, characterBonus, throughPenalty, total };
+  const trickBonus = game.score.trickBonus ?? 0;          // トリック成立のボーナス
+  const throughPenalty = game.score.throughPenalty ?? 0;  // スルーの減点(合計は0未満にしない)
+  const total = Math.max(0, survival + takeout + board + waveBonus + noteBonus + characterBonus + trickBonus - throughPenalty);
+  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, characterBonus, trickBonus, throughPenalty, total };
 }
 
 function updateDangerAlert() {
@@ -3393,8 +3456,8 @@ function updateHUD() {
   // 経過ターンを毎回反映。#hudは非表示なので、スコアパネル内の可視ターン表示を更新する。
   const turnVis = document.getElementById("turnTextVisible");
   if (turnVis) turnVis.textContent = game.turn;
-  // 生存ターン数のランク。上がった瞬間だけ演出を出す
-  const rank = currentTurnRank(score.survivedTurns);
+  // スコアのランク。上がった瞬間だけ演出を出す
+  const rank = currentScoreRank(score.total);
   const rankEl = document.getElementById("rankText");
   if (rankEl) rankEl.textContent = `${rank.icon} ${rank.name}`;
   if (game.lastRankName !== rank.name) {
@@ -3617,7 +3680,7 @@ function bindHowTo() {
     e.stopPropagation();
     if (page < 2) { page++; renderPage(); } else { close(); }
   });
-  // ⑧⑨の「キャラ性能を見る」から、遊び方を閉じてキャラ性能を開く
+  // ⑧⑨の「キャラクターを見る」から、遊び方を閉じてキャラ性能を開く
   overlay.querySelectorAll(".howToBookLink").forEach((link) => {
     link.addEventListener("pointerdown", (e) => {
       e.stopPropagation(); e.preventDefault();
@@ -3633,6 +3696,32 @@ function bindHowTo() {
   renderPage();
 }
 
+// トリック一覧(TRICKSの定義から生成するので、採点と表示が必ず一致する)
+function bindTrickBook() {
+  const overlay = document.getElementById("trickBookOverlay");
+  const openButton = document.getElementById("trickBookBtn");
+  const closeButton = document.getElementById("trickBookClose");
+  const list = document.getElementById("trickBookList");
+  if (!overlay || !openButton || !closeButton || !list) return;
+  list.replaceChildren();
+  for (const trick of TRICKS) {
+    const row = document.createElement("div");
+    row.className = "trickRow" + (trick.score < 0 ? " penalty" : "");
+    const scoreText = trick.score > 0 ? `+${trick.score}` : (trick.score < 0 ? `${trick.score}` : "±0");
+    row.innerHTML = `<span class="trickName">${trick.name}</span>`
+      + `<span class="trickScore">${scoreText}</span>`
+      + `<span class="trickDesc">${trick.desc}</span>`;
+    list.appendChild(row);
+  }
+  const close = () => overlay.classList.remove("show");
+  openButton.addEventListener("click", (e) => { e.stopPropagation(); overlay.classList.add("show"); });
+  closeButton.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  overlay.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    if (!e.target.closest("#trickBookPanel")) close();
+  });
+}
+
 function buildCharacterBookPages() {
   const container = document.getElementById("characterBookPages");
   if (!container) return [];
@@ -3644,7 +3733,7 @@ function buildCharacterBookPages() {
   container.replaceChildren();
   for (const [pageIndex, group] of groups.entries()) {
     const page = document.createElement("div");
-    page.className = "characterBookPage" + (pageIndex === 0 ? " active" : "");
+    page.className = "characterBookPage" + (pageIndex === 0 ? " active" : "") + (group.enemy ? " enemyPage" : "");
     page.dataset.label = group.label;
     for (const character of group.items) {
       const card = document.createElement("article");
@@ -3683,11 +3772,14 @@ function bindCharacterBook() {
   const groups = buildCharacterBookPages();
   if (!overlay || !openButton || !closeButton || !prevButton || !nextButton || !pageLabel || groups.length === 0) return;
   let page = 0;
+  const lead = document.getElementById("characterBookLead");
   const renderPage = () => {
     document.querySelectorAll(".characterBookPage").forEach((el, index) => el.classList.toggle("active", index === page));
     pageLabel.textContent = groups[page].label;
     prevButton.disabled = page === 0;
     nextButton.textContent = page === groups.length - 1 ? "とじる" : "つぎ";
+    // 合体するのは味方だけなので、敵ページでは案内を隠す
+    lead?.classList.toggle("hidden", Boolean(groups[page].enemy));
   };
   const open = () => { page = 0; overlay.classList.add("show"); renderPage(); };
   const close = () => overlay.classList.remove("show");
@@ -3745,6 +3837,7 @@ bindTutorialToggle();
 bindUiSwap();
 bindHowTo();
 bindCharacterBook();
+bindTrickBook();
 bindSoundButton();
 bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
 buildSurvivalGame();
