@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>しゅがけカーリング サバイバル PROTO24</title>
+<title>しゅがけカーリング</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   html, body {
@@ -220,6 +220,15 @@
   }
   /* 見出しと数値を左右に振り分け、数値は右揃えで桁が増えても位置が動かない */
   #scorePanel > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  /* BGMのON/OFF。操作の邪魔にならないよう左下(チュートリアルの下)に置く */
+  #bgmBtn {
+    position: fixed; left: 7px; top: calc(100% - 34px); z-index: 4;
+    width: var(--side-panel-width); box-sizing: border-box; text-align: center;
+    font-size: 9px; padding: 5px 2px; opacity: 0.8;
+  }
+  #bgmBtn.playing { color: #fff; background: #e91e63; border-color: #e91e63; }
+  body.ui-swapped #bgmBtn { left: auto; right: 7px; }
+  body.ui-swapped #allOutBtn { right: auto; left: 7px; }
   /* デバッグ用「ぜんぶ出す」:ソケットの真下に仮置き(最終的には削除する) */
   #allOutBtn {
     position: fixed; right: 7px; top: calc(100% - 34px); z-index: 4;
@@ -411,8 +420,15 @@
   .trickDesc { grid-column: 1 / -1; font: 10px/1.35 system-ui, sans-serif; opacity: 0.82; }
   .trickScore { color: #e91e63; font-size: 13px; font-weight: 900; white-space: nowrap; }
   .trickRow.penalty .trickName, .trickRow.penalty .trickScore { color: #8d5163; }
-  .characterBookPage { display: none; height: min(64vh, 470px); grid-template-columns: repeat(3, minmax(0,1fr)); grid-auto-rows: minmax(0,1fr); gap: 7px; padding: 9px; box-sizing: border-box; }
+  /* 味方は12体を2列×6行で並べる */
+  .characterBookPage { display: none; height: min(64vh, 470px); grid-template-columns: repeat(2, minmax(0,1fr)); grid-auto-rows: minmax(0,1fr); gap: 6px; padding: 9px; box-sizing: border-box; }
   .characterBookPage.active { display: grid; }
+  /* 味方カードは横長。アイコン左、名前と説明を右に置く */
+  .characterBookPage:not(.enemyPage) .characterCard {
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+    column-gap: 8px; row-gap: 1px; place-items: center start; text-align: left; padding: 5px 8px;
+  }
+  .characterBookPage:not(.enemyPage) .characterCardIcon { grid-row: 1 / 3; font-size: 22px; }
   /* 敵は7体と半端で3列だと余白が不揃いになるため、横長カードを縦に7つ並べる */
   .characterBookPage.enemyPage { grid-template-columns: 1fr; grid-auto-rows: 1fr; gap: 5px; }
   .characterBookPage.enemyPage .characterCard {
@@ -426,7 +442,11 @@
   .characterCardIcon { font-size: 28px; line-height: 1; }
   .characterCardName { color: #e91e63; font-size: 12px; font-weight: 700; }
   .characterCard.enemy .characterCardName { color: #ff8eb5; }
-  .characterCardTrait { font: 10px/1.35 system-ui, sans-serif; overflow-wrap: anywhere; }
+  /* 説明は改行前提。2行ぶんの高さを常に確保して、進化前後を切り替えても名前の位置がずれないようにする */
+  .characterCardTrait {
+    font: 10px/1.35 system-ui, sans-serif; overflow-wrap: anywhere;
+    min-height: calc(10px * 1.35 * 2); display: flex; align-items: center;
+  }
   /* 味方カードはタップで進化前/後を切り替えられる */
   .characterCard.switchable { cursor: pointer; }
   .characterCardHint { margin-top: 2px; font: 8px system-ui, sans-serif; color: #e91e63; opacity: 0.75; }
@@ -452,7 +472,7 @@
 <body>
 <canvas id="board"></canvas>
 <div id="hud">
-  <span><span class="label">PROTO24</span>サバイバル開発</span>
+  <span>しゅがけカーリング</span>
   <span><span class="label">TURN</span><span id="turnText">1</span></span>
   <span><span class="label">WAVE</span><span id="waveText">1</span></span>
   <span><span class="label">盤上</span><span id="countText">0</span></span>
@@ -491,6 +511,8 @@
     <div id="trickBookList"></div>
   </div>
 </div>
+<audio id="bgm" src="sound/%E3%83%A1%E3%82%A4%E3%83%B3_01.mp3" loop preload="auto"></audio>
+<button class="btn" id="bgmBtn" aria-pressed="false">♪ BGM</button>
 <button class="btn" id="fastForwardBtn">はやおくり</button>
 <div id="throwTutorial">
   <div id="tutorialControls"><button id="tutorialToggle" type="button" aria-expanded="true">かくす</button><button id="swapUiBtn" type="button">いれかえ</button></div>
@@ -561,11 +583,11 @@ const CONFIG = {
   ENEMY_START_COUNT: 3,     // 敵の初期解禁数=初期配置数(マルガリティフェラ/アルバ/ウェンカ)
   ENEMY_UNLOCK_EVERY: 10,   // 敵は何ターンごとに増えるか
   ENEMY_UNLOCK_STEP: 1,     // 敵は1回に何種増えるか(10ターンごとに1種)
-  SCORE_WAVE_CLEAR: 2000,
+  SCORE_WAVE_CLEAR: 1000,
   SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
-  SCORE_TURN: 100,       // 1生存ターンあたりの得点
-  SCORE_TAKEOUT: 250,    // 敵を1体テイクアウトしたときの得点
+  SCORE_TURN: 0,         // 生存ターンの加点は廃止(0)。スコアはテイクとトリックで稼ぐ
+  SCORE_TAKEOUT: 100,    // 敵を1体テイクアウトしたときの得点
   SCORE_THROUGH_PENALTY: 120, // スルー(何にも当たらずハウスも素通り)の減点
   // ランクはスコアで達成する。到達した最大のものを表示する
   SCORE_RANKS: [
@@ -576,7 +598,7 @@ const CONFIG = {
     { score: 25000, name: "アイスの支配者", icon: "👑" },
     { score: 50000, name: "しゅがけ神",     icon: "🏆" },
   ],
-  SCORE_BOARD_MAX: 100,  // 自石1個が中心にある場合の盤面支配点
+  SCORE_BOARD_MAX: 0,    // 盤面支配の加点は廃止(0)
   FRICTION: 0.985,       // 高速域の基本速度減衰率
   ROLLING_RESISTANCE: 0.03, // 毎フレーム一定量を引き、低速ほど相対的に強く減速させる
   /* --- 衝突の並進物理(PROTO23で入射角ベースのモデルへ全面置き換え) ---
@@ -832,15 +854,15 @@ const ENEMIES = [
 // トリック(ショットの呼称)の一覧。表示・採点・一覧パネルをこの定義だけで賄う。
 // 上にあるものほど優先(1投につき最上位の1件だけが成立する)。
 const TRICKS = [
-  { id: "triple",     label: "とりぷるていくっ!!!",  name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
-  { id: "double",     label: "だぶるていくっ!!",     name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
+  { id: "takeout",    label: "ていくあうとっ！",     name: "テイクアウト",       score: 50,   desc: "敵を ハウスの外へ 出す。" },
   { id: "raise",      label: "れいずていくっ！",     name: "レイズテイク",       score: 200,  desc: "味方の石を 当てて 間接的に テイク。" },
-  { id: "comeAround", label: "かむ・あらうんどっ！", name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
+  { id: "double",     label: "だぶるていくっ!!",     name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
+  { id: "triple",     label: "とりぷるていくっ!!!",  name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
+  { id: "inPlay",     label: "いんぷれい！",         name: "インプレイ",         score: 100,  desc: "自分の石が ハウスに 残る。" },
   { id: "tee",        label: "てぃーしょっとっ！",   name: "ティーショット",     score: 300,  desc: "何にも 当てずに ボタンの上に 止める。" },
+  { id: "comeAround", label: "かむ・あらうんどっ！", name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
   { id: "freeze",     label: "ふりーずっ！",         name: "フリーズショット",   score: 250,  desc: "敵の石の すぐ手前に ぴたりと 止める。" },
-  { id: "takeout",    label: "ていくあうとっ！",     name: "テイクアウト",       score: 0,    desc: "敵を ハウスの外へ 出す。(テイク得点は別に入る)" },
-  { id: "port",       label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 200, desc: "石と石の すきまを 当たらずに 通す。" },
-  { id: "inPlay",     label: "いんぷれい！",         name: "インプレイ",         score: 50,   desc: "自分の石が ハウスに 残る。" },
+  { id: "port",       label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500, desc: "石と石の すきまを 当たらずに 通す。" },
   { id: "through",    label: "するー…",             name: "スルー",             score: -120, desc: "何にも 当たらず ハウスも 素通り。(減点)" },
 ];
 const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
@@ -1789,6 +1811,7 @@ function throwPiece(params) {
   game.raiseTakeThisThrow = false;
   game.buttonDrawThisThrow = false;
   game.passedThroughPort = false;
+  game.shotHitSomething = false;
   // カム・アラウンド判定用:投球前にハウス手前(投げる側)にガードがあったかを覚えておく
   game.guardBeforeShot = game.pieces.some(g =>
     g !== p && g.state === "onboard" && g.y > CONFIG.HOUSE_RADIUS * 0.5 &&
@@ -2344,6 +2367,9 @@ function physicsStep() {
 
           S.hasCollided = true;
           T.hasCollided = true;
+          // 投げた石が何かに当たったことを投球単位で記録する。石が盤外へ出て消えても残るので、
+          // 「当たったのにスルー判定になる」誤判定を防げる
+          if (S.isCurrentShot || T.isCurrentShot) game.shotHitSomething = true;
           // 投げた石から受け取った運動を次の石へ伝える。投げた石自身ではなく、
           // その影響を受けた別の石が敵を飛ばした場合をレイズテイクとして記録する。
           if ((S.isCurrentShot || S.indirectFromShot) && !T.isCurrentShot) {
@@ -2399,10 +2425,15 @@ function physicsStep() {
               tSpeed *= 1.5 - 1.25 * fast;          // 遅い:1.5倍 〜 速い:0.25倍
               if (fast > 0.45) flashEnemyAbility(T);
             }
-            // ジーナ=敵に飛ばされにくい / マミ=味方に飛ばされにくい
+            // ジーナ=敵に、マミ=味方に「あてられたとき」だけ飛びづらい。
+            // 自分が飛んでいって当たった場合はニュートラル(ほぼ静止しているときだけ発動)
             if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "greed") {
               const resistRole = T.ginaForm === "mami" ? "player" : "enemy";
-              if (S.role === resistRole) { tSpeed *= 0.25; flashEnemyAbility(T); }
+              const targetSpeedBefore = strikerIsA ? speedB : speedA;
+              if (S.role === resistRole && targetSpeedBefore < 1.5) {
+                tSpeed *= 0.25;
+                flashEnemyAbility(T);
+              }
             }
             if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enlargedByDellorath) flashEnemyAbility(T);
             const enemyAdvancePush = game.phase === "enemyMoving" && S.role === "enemy" && T.role === "player";
@@ -2590,9 +2621,12 @@ function showBestShotResult() {
   const shot = game.pieces.find(p => p.isCurrentShot && p.state === "onboard");
   const shotR = shot ? Math.hypot(shot.x, shot.y) : Infinity;
 
-  // フリーズ:相手(敵)の石のすぐ手前にぴたりと止まった
+  // 何かに当たったか(盤外へ消えた後も残る投球単位のフラグで見る)
+  const hitSomething = Boolean(game.shotHitSomething);
+
+  // フリーズ:何にも当てずに、敵の石のすぐ手前でぴたりと止まった
   let freeze = false;
-  if (shot && shot.hasCollided === false) {
+  if (shot && !hitSomething) {
     for (const e of game.pieces) {
       if (e.role !== "enemy" || e.state !== "onboard") continue;
       const d = Math.hypot(e.x - shot.x, e.y - shot.y);
@@ -2600,10 +2634,10 @@ function showBestShotResult() {
       if (d <= touching * 1.35 && shotR > CONFIG.HOUSE_RADIUS / 12) { freeze = true; break; }
     }
   }
-  // スルー:何にも当たらず、ハウスも素通りして奥へ行ってしまった(マイナス点)
-  const through = Boolean(shot === undefined || (shot && !shot.hasCollided && shotR > CONFIG.HOUSE_RADIUS))
-    && game.chainCountThisThrow === 0 && !game.passedThroughPort
-    && !(shot && shot.entered && shotR <= CONFIG.HOUSE_RADIUS);
+  // スルー:何にも当たらず、ハウスにも残らなかった(盤外へ消えた場合も含む)
+  const stayedInHouse = Boolean(shot && shot.entered && shotR <= CONFIG.HOUSE_RADIUS);
+  const through = !hitSomething && game.chainCountThisThrow === 0
+    && !game.passedThroughPort && !freeze && !stayedInHouse;
   // インプレイ:自分の石がハウスに残った
   const inPlay = game.pieces.some(p => p.role === "player" && p.state === "onboard" &&
     Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
@@ -2784,6 +2818,42 @@ function updateSlideSound() {
   slideGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
   const digitalSweep = Math.sin(performance.now() * 0.008) * 140 * motion;
   slideFilter.frequency.setTargetAtTime(1900 + Math.min(movingSpeed, 35) * 34 + digitalSweep, audioCtx.currentTime, 0.08);
+}
+
+/* ---------- BGM ----------
+ * モバイルは「ユーザー操作なしの自動再生」が禁止されているため、最初のタップで再生を試みる。
+ * ON/OFFは端末に保存し、次回以降は設定を引き継ぐ。効果音とは独立(効果音は現在OFF)。
+ * ------------------------- */
+let bgmEnabled = false;
+function bindBgmButton() {
+  const audio = document.getElementById("bgm");
+  const button = document.getElementById("bgmBtn");
+  if (!audio || !button) return;
+  audio.volume = 0.45;
+  try { bgmEnabled = localStorage.getItem("sc_bgm") !== "0"; } catch { bgmEnabled = true; }
+  const sync = () => {
+    button.textContent = bgmEnabled ? "♪ BGM ON" : "♪ BGM OFF";
+    button.setAttribute("aria-pressed", bgmEnabled ? "true" : "false");
+    button.classList.toggle("playing", bgmEnabled && !audio.paused);
+  };
+  const tryPlay = () => {
+    if (!bgmEnabled) return;
+    audio.play().then(sync).catch(() => {}); // 自動再生が拒否されても次のタップで再挑戦する
+  };
+  button.addEventListener("pointerdown", (e) => {
+    e.stopPropagation(); e.preventDefault();
+    bgmEnabled = !bgmEnabled;
+    try { localStorage.setItem("sc_bgm", bgmEnabled ? "1" : "0"); } catch {}
+    if (bgmEnabled) tryPlay(); else audio.pause();
+    sync();
+  });
+  audio.addEventListener("play", sync);
+  audio.addEventListener("pause", sync);
+  // 最初のユーザー操作で再生開始(以降は不要なので一度だけ)
+  const unlock = () => { tryPlay(); window.removeEventListener("pointerdown", unlock, true); };
+  window.addEventListener("pointerdown", unlock, true);
+  sync();
+  tryPlay();
 }
 
 function bindSoundButton() {
@@ -3474,6 +3544,9 @@ function updateHUD() {
 
 /* ---------- 入力 ---------- */
 window.addEventListener("pointerdown", (e) => {
+  // 敵の説明パネルは、パネル自身(「けす」を含む)以外のどこを押しても消す
+  const abilityEl = document.getElementById("abilityInfo");
+  if (abilityEl?.classList.contains("fixed") && !e.target.closest("#abilityInfo")) hideAbilityInfo();
   if (e.target.closest("#scenarioBar") || e.target.closest("#handBar") || e.target.closest("#sideInfo") || e.target.closest("#throwTutorial")) return;
   if (game.phase !== "aim" || game.gameOver) return;
   // 盤上の石(敵・味方どちらも)をタップしたら能力説明を吹き出しで出す。石の上からは照準を始めない。
@@ -3838,6 +3911,7 @@ bindUiSwap();
 bindHowTo();
 bindCharacterBook();
 bindTrickBook();
+bindBgmButton();
 bindSoundButton();
 bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
 buildSurvivalGame();
