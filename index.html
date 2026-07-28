@@ -407,23 +407,25 @@
   /* トリック一覧 */
   #trickBookOverlay {
     position: fixed; inset: 0; z-index: 41; display: none; align-items: center; justify-content: center;
-    padding: 12px; box-sizing: border-box; background: rgba(43,31,36,.74); touch-action: none;
+    padding: 8px; box-sizing: border-box; background: rgba(43,31,36,.74); touch-action: none;
   }
   #trickBookOverlay.show { display: flex; }
   #trickBookPanel {
-    width: min(560px, 100%); max-height: calc(100vh - 24px); overflow: hidden; display: flex; flex-direction: column;
+    width: min(560px, 100%); max-height: calc(100vh - 16px); overflow: hidden; display: flex; flex-direction: column;
     border: 3px solid #f48fb1; border-radius: 20px; background: #fff8fb;
     box-shadow: 0 16px 46px rgba(43,31,36,.36); color: #4a2133;
     font-family: 'DotGothic16', system-ui, sans-serif;
   }
-  #trickBookList { overflow-y: auto; padding: 8px 9px 10px; display: flex; flex-direction: column; gap: 5px; }
+  #trickBookList { overflow-y: auto; padding: 6px 9px 7px; display: flex; flex-direction: column; gap: 3px; }
+  /* トリックが13件あるので、名前と説明のあいだの行間を詰めて一覧に収める。
+     gap は「行間 列間」の順。列間(名前と点数のあいだ)は広いまま。 */
   .trickRow {
-    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
-    padding: 6px 9px; border: 1px solid #f5b0c8; border-radius: 11px; background: white;
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0 8px;
+    padding: 3px 9px 4px; border: 1px solid #f5b0c8; border-radius: 10px; background: white;
   }
   .trickRow.penalty { border-color: #c9a3b2; background: #f7eef1; }
-  .trickName { color: #e91e63; font-size: 12px; }
-  .trickDesc { grid-column: 1 / -1; font: 10px/1.35 'DotGothic16', system-ui, sans-serif; opacity: 0.82; }
+  .trickName { color: #e91e63; font-size: 12px; line-height: 1.2; }
+  .trickDesc { grid-column: 1 / -1; font: 10px/1.2 'DotGothic16', system-ui, sans-serif; opacity: 0.82; }
   .trickScore { color: #e91e63; font-size: 13px; font-weight: 900; white-space: nowrap; }
   .trickRow.penalty .trickName, .trickRow.penalty .trickScore { color: #8d5163; }
   /* 味方は12体を2列×6行で並べる */
@@ -874,14 +876,14 @@ const ENEMIES = [
 // rank は同じ group の中での強さ。
 const TRICKS = [
   { id: "takeout",    group: "take",  rank: 1, label: "ていくあうとっ！",       name: "テイクアウト",       score: 50,   desc: "敵を ハウスの外へ 出す。" },
-  { id: "double",     group: "take",  rank: 2, label: "だぶるていくっ!!",       name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
-  { id: "triple",     group: "take",  rank: 3, label: "とりぷるていくっ!!!",    name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
+  { id: "double",     group: "take",  rank: 2, label: "だぶるていくっ!!",       name: "ダブルテイク",       score: 200,  desc: "1回で 敵を 2体 ハウスの外へ。" },
+  { id: "triple",     group: "take",  rank: 3, label: "とりぷるていくっ!!!",    name: "トリプルテイク",     score: 500,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
   { id: "hitAndStay", group: "after", rank: 1, label: "ひっと・あんど・すてい！", name: "ヒットアンドステイ", score: 300,  desc: "敵を ハウスの外へ 出して、投げた キャラは その場に 残る。" },
   { id: "hitAndRoll", group: "after", rank: 1, label: "ひっと・あんど・ろーるっ！", name: "ヒットアンドロール", score: 200, desc: "敵を ハウスの外へ 出して、投げた キャラは 少しだけ 動く。" },
   { id: "runback",    group: "after", rank: 2, label: "らんばっくっ！",         name: "ランバック",         score: 500,  desc: "手前の なかまを ぶつけて テイクし、その なかまを ハウスに 残す。" },
   { id: "peel",       group: "after", rank: 1, label: "ぴーるっ！",             name: "ピール",             score: 150,  desc: "敵を ハウスの外へ 出して、投げた キャラも プレイエリアの外へ。" },
-  { id: "tee",        group: "draw",  rank: 1, label: "てぃーしょっとっ！",     name: "ティーショット",     score: 300,  desc: "投げた キャラを ボタンの上に 止める。" },
-  { id: "comeAround", group: "draw",  rank: 2, label: "かむ・あらうんどっ！",   name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
+  { id: "tee",        group: "draw",  rank: 1, label: "てぃーしょっとっ！",     name: "ティーショット",     score: 200,  desc: "投げた キャラを ボタンの上に 止める。" },
+  { id: "comeAround", group: "draw",  rank: 2, label: "かむ・あらうんどっ！",   name: "カム・アラウンド",   score: 500,  desc: "ガードを よけて ボタンの上に 止める。" },
   { id: "rollIn",     group: "rollIn",rank: 1, label: "ろーるいんっ！",         name: "ロールイン",         score: 250,  desc: "ハウスの外の なかまを 動かして ハウスに 入れる。" },
   { id: "freeze",     group: "freeze",rank: 1, label: "ふりーずっ！",           name: "フリーズショット",   score: 250,  desc: "敵を 出さずに、その すぐ手前で ぴたりと 止める。" },
   { id: "port",       group: "port",  rank: 1, label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500,  desc: "キャラの すきまを 当たらずに 通す。" },
@@ -2729,15 +2731,16 @@ function showBestShotResult() {
   const through = !hitSomething && game.chainCountThisThrow === 0
     && !game.passedThroughPort && !freeze && !stayedInHouse;
 
-  // ランバック:手前のなかまをぶつけてテイクし、そのなかまがハウスに残った
-  const runback = game.raiseTakeThisThrow && game.pieces.some(p =>
-    p.role === "player" && p.state === "onboard" && p.indirectFromShot &&
-    Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
-  // ロールイン:ハウスの外にいたなかまが、この投球で動いてハウスに入った
-  const rollIn = game.pieces.some(p =>
+  // 「ハウスの外にいたなかまを、この投球で動かしてハウスへ入れた」か。
+  // ランバックもロールインも、動かす対象はハウスの外にいたなかまに限る
+  // (もともとハウスの中にいたなかまを小突いただけでは成立しない)。
+  const broughtAllyIntoHouse = game.pieces.some(p =>
     p.role === "player" && p.state === "onboard" && p.indirectFromShot &&
     game.outsideAlliesBeforeShot?.has(p.uid) &&
     Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
+  // ランバック:そのなかまが敵をテイクまでした上位版。重ねて出さないようロールインは抑える
+  const runback = game.raiseTakeThisThrow && broughtAllyIntoHouse;
+  const rollIn = broughtAllyIntoHouse && !runback;
 
   // 投げたキャラが自分でテイクしたときの、そのキャラの結末
   let afterId = null;
