@@ -47,7 +47,7 @@
     background: rgba(255,255,255,0.96); color: #e91e63;
     border: 2px solid #f48fb1; border-radius: 10px;
     padding: 5px 8px; font-size: 10px;
-    font-family: inherit;
+    font-family: 'DotGothic16', system-ui, sans-serif; /* inheritだとボタン既定フォントになるため明示する */
     pointer-events: auto;
   }
   .btn.active { background: #52526a; border-color: #7878a0; }
@@ -203,7 +203,7 @@
     position: fixed; inset: 0; z-index: 5;
     display: none; align-items: center; justify-content: center;
     background: rgba(18,14,20,0.72); color: #fff4e2;
-    font-family: system-ui, sans-serif; text-align: center;
+    font-family: 'DotGothic16', system-ui, sans-serif; text-align: center;
   }
   #gameOver.show { display: flex; }
   #gameOverPanel {
@@ -416,7 +416,7 @@
   }
   .trickRow.penalty { border-color: #c9a3b2; background: #f7eef1; }
   .trickName { color: #e91e63; font-size: 12px; }
-  .trickDesc { grid-column: 1 / -1; font: 10px/1.35 system-ui, sans-serif; opacity: 0.82; }
+  .trickDesc { grid-column: 1 / -1; font: 10px/1.35 'DotGothic16', system-ui, sans-serif; opacity: 0.82; }
   .trickScore { color: #e91e63; font-size: 13px; font-weight: 900; white-space: nowrap; }
   .trickRow.penalty .trickName, .trickRow.penalty .trickScore { color: #8d5163; }
   /* 味方は12体を2列×6行で並べる */
@@ -443,12 +443,12 @@
   .characterCard.enemy .characterCardName { color: #ff8eb5; }
   /* 説明は改行前提。2行ぶんの高さを常に確保して、進化前後を切り替えても名前の位置がずれないようにする */
   .characterCardTrait {
-    font: 10px/1.35 system-ui, sans-serif; overflow-wrap: anywhere;
+    font: 10px/1.35 'DotGothic16', system-ui, sans-serif; overflow-wrap: anywhere;
     min-height: calc(10px * 1.35 * 2); display: flex; align-items: center;
   }
   /* 味方カードはタップで進化前/後を切り替えられる */
   .characterCard.switchable { cursor: pointer; }
-  .characterCardHint { margin-top: 2px; font: 8px system-ui, sans-serif; color: #e91e63; opacity: 0.75; }
+  .characterCardHint { margin-top: 2px; font: 8px 'DotGothic16', system-ui, sans-serif; color: #e91e63; opacity: 0.75; }
   .characterCard.evolved { border-color: #ffcf33; background: #fffaf0; box-shadow: 0 0 0 2px rgba(255,207,51,0.45); }
   .characterCard.evolved .characterCardName { color: #b8860b; }
   .characterBookPager { display: grid; grid-template-columns: 78px 1fr 78px; align-items: center; gap: 8px; padding: 9px 11px 11px; border-top: 1px solid #f7bfd1; }
@@ -466,6 +466,14 @@
     .characterCardName { font-size: 10px; }
     .characterCardTrait { font-size: 8px; line-height: 1.25; }
   }
+
+  /* --- UIフォントの統一(ボタンや入力要素は既定フォントに戻るため最後にまとめて指定) --- */
+  button, .btn, #tutorialToggle, #swapUiBtn, .howToBookLink, .abilityClose {
+    font-family: 'DotGothic16', system-ui, sans-serif;
+  }
+
+  /* 狙い中の透過はJS(updateSideInfoVisibility)でstyle.opacityを直接動かす。ここでは補間だけ指定 */
+  #scenarioBar, #sideInfo { transition: opacity 0.15s; }
 </style>
 </head>
 <body>
@@ -518,7 +526,7 @@
   <div class="tutorialBody">
   <div class="tutorialStep" id="tutorialSelect"><b class="tutorialTitle">① えらぶ</b><div class="selectAnim"><span class="selectBall"></span></div><b id="selectInstruction">つかんで運ぶ</b><br><span id="selectSub">したの◯へ</span></div>
   <div class="tutorialStep" id="tutorialAim"><b class="tutorialTitle">② ねらう</b><div class="tutorialGesture"><span class="gestureArrow" id="aimGestureArrow">↓</span><span class="gestureFinger">👆</span></div><b id="aimInstruction">下へ引く</b><br><span id="aimSub">狙いを決める</span></div>
-  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">スピード</span><span class="gaugeVal" id="speedReadout">―</span></div><div class="speedWrap"><div class="vBar"><div class="vFill" id="speedBarFill"></div><span class="vArrow">↑</span></div></div></div><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">カーブ</span><span class="gaugeVal" id="curveReadout">まがりにくい</span></div><div class="bar2 curveBar"><div class="fill2 curveFill" id="curveBarFill"></div></div></div></div>
+  <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">スピード</span><span class="gaugeVal" id="speedReadout">―</span></div><div class="speedWrap"><div class="vBar"><div class="vFill" id="speedBarFill"></div><span class="vArrow">↑</span></div></div></div><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">カーブ</span><span class="gaugeVal" id="curveReadout">まがらない</span></div><div class="bar2 curveBar"><div class="fill2 curveFill" id="curveBarFill"></div></div></div></div>
   </div>
 </div>
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
@@ -884,7 +892,7 @@ const CHARACTERS = [
   // ユゥナリナ:ベルペットの逆。弱い当たりでもよく飛び、当たった先も飛ばしやすい(レイズテイク向き)
   { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "あたったとき 飛びやすい。", mods: { knockResist: 2.1 } },
   // モコクン:軌道予測はこちらへ移動(通常=相手の飛ぶ方向、進化=自分の飛ぶ方向)
-  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "相手を 飛ばす 方向が 分かる。", mods: { radiusScale: 1.3, trajectoryGuide: true } },
+  { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "相手を 飛ばす 方向が 分かる。", mods: { trajectoryGuide: true } },
   { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "あたったとき 弾く。", mods: { restitution: 0.22 } },
 ];
 
@@ -1534,6 +1542,15 @@ function updateSideInfoVisibility() {
   // スコア/ターン(sideInfo)は狙い操作中も消さない(消えると見えないとの指摘)。常時表示。
   document.getElementById("sideInfo")?.classList.remove("hidden");
   document.getElementById("fastForwardBtn")?.classList.toggle("hidden", game.aim !== null || game.phase === "aim");
+  // 狙っている間・押し出している間は、盤面が見やすいよう上部のUIを大きく透明にする。
+  // 指を離す(game.aim が null に戻る)と元の濃さへ戻る。
+  // CSSクラスだと他ルールとの兼ね合いで効かない場合があったため、直接styleで指定する。
+  const aiming = game.aim !== null;
+  const dim = aiming ? "0.12" : "1";
+  const bar = document.getElementById("scenarioBar");
+  const side = document.getElementById("sideInfo");
+  if (bar) bar.style.opacity = dim;
+  if (side) side.style.opacity = dim;
 }
 
 function updateThrowTutorial() {
@@ -1595,10 +1612,15 @@ function updateThrowTutorial() {
   }
   const speedText = document.getElementById("speedReadout");
   if (speedText) speedText.textContent = !launching ? "―" : power > 0.72 ? "はやい！" : power > 0.35 ? "ふつう" : "おそい";
-  // カーブ表現:横ズレが大きい(強回転)ほど「まがりにくい」。中央ほど弱回転=よく曲がる。
+  // カーブ表現:横ズレが大きい(強回転)ほど曲がらない。中央ほど弱回転=よく曲がる。
+  // 枠からはみ出さないよう、すべて5文字以内の言葉で3段階に分ける。
   // 曲がるときの向きは左右で示す(真ん中は「まっすぐ」ではないことに注意)。
   const curveText = document.getElementById("curveReadout");
-  if (curveText) curveText.textContent = Math.abs(curve) >= 0.7 ? "まがりにくい" : curve < 0 ? "左にまがる" : "右にまがる";
+  if (curveText) {
+    // 左右はバーの向きで分かるので、文言は曲がり具合の3段階だけにする(すべて5文字以内)
+    const bend = Math.abs(curve);
+    curveText.textContent = bend >= 0.7 ? "まがらない" : bend >= 0.35 ? "まがる" : "よくまがる";
+  }
 }
 
 // 狙いの向きを「真上」からMAX_AIM_ANGLE以内に制限する(盤と逆向き=後ろ向きの投球を禁止)
@@ -2692,8 +2714,6 @@ function showToast(text, scoreText = "") {
 /* ---------- SE ---------- */
 let audioCtx = null;
 let audioMaster = null;
-let slideGain = null;
-let slideFilter = null;
 let soundEnabled = true; // 効果音(ヒット/スロー)を実ファイル再生に置き換えたので既定でON
 const collisionPairTimes = new Map();
 
@@ -2707,21 +2727,7 @@ function ensureAudio() {
     audioMaster.gain.value = 0.9;
     audioMaster.connect(audioCtx.destination);
 
-    const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
-    const data = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    const slideSource = audioCtx.createBufferSource();
-    slideSource.buffer = noiseBuffer;
-    slideSource.loop = true;
-    slideFilter = audioCtx.createBiquadFilter();
-    slideFilter.type = "bandpass";
-    slideFilter.frequency.value = 2200;
-    slideFilter.Q.value = 0.45;
-    slideGain = audioCtx.createGain();
-    slideGain.gain.value = 0;
-    slideSource.connect(slideFilter).connect(slideGain).connect(audioMaster);
-    slideSource.start();
-
+    // 旧・ノイズ生成の滑走音は廃止(実ファイルのループ再生に置き換え。updateSlideSound参照)
   }
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
@@ -2747,26 +2753,36 @@ function registerCollisionHit(a, b, impact) {
   playCollisionSound(impact);
 }
 
-// 衝突音は sound/ヒット_01.mp3 を再生する。重なっても鳴らせるよう、同じ音源を複数用意して使い回す。
-// 音量は衝突の強さに応じて変える(弱い接触は小さく)。
+/* 効果音はWebAudioで鳴らす。
+ * iOS Safari では <audio> の volume 指定が無視される(常に最大)ため、音量バランスを取るには
+ * GainNode を通す必要がある。mp3をAudioBufferへ読み込んでおき、鳴らすたびに使い捨ての
+ * BufferSourceを作る方式にすると、重なっても途切れず遅延も小さい。 */
 const HIT_SE_SRC = "sound/%E3%83%92%E3%83%83%E3%83%88_01.mp3";
-const hitSePool = [];
-let hitSeIndex = 0;
-function ensureHitSePool() {
-  if (hitSePool.length) return;
-  for (let i = 0; i < 4; i++) {
-    const audio = new Audio(HIT_SE_SRC);
-    audio.preload = "auto";
-    hitSePool.push(audio);
-  }
+const SLIDE_SE_SRC = "sound/%E3%82%B9%E3%83%AD%E3%83%BC_01.mp3";
+const SE_VOLUME = 1.0;   // 効果音の基準音量(BGMより大きめ)
+const seBuffers = {};    // src -> AudioBuffer
+function loadSeBuffer(src) {
+  const ac = ensureAudio();
+  if (!ac || seBuffers[src] !== undefined) return;
+  seBuffers[src] = null; // 読み込み中の目印(多重ロード防止)
+  fetch(src)
+    .then(res => res.arrayBuffer())
+    .then(buf => ac.decodeAudioData(buf))
+    .then(decoded => { seBuffers[src] = decoded; })
+    .catch(() => { delete seBuffers[src]; });
 }
 function playCollisionSound(impact) {
-  if (!soundEnabled) return;
-  ensureHitSePool();
-  const audio = hitSePool[hitSeIndex];
-  hitSeIndex = (hitSeIndex + 1) % hitSePool.length;
-  audio.volume = clamp(impact / 22, 0.15, 1) * 0.7;
-  try { audio.currentTime = 0; audio.play().catch(() => {}); } catch (_) {}
+  const ac = ensureAudio();
+  if (!ac || !soundEnabled) return;
+  const buffer = seBuffers[HIT_SE_SRC];
+  if (!buffer) { loadSeBuffer(HIT_SE_SRC); return; }
+  const source = ac.createBufferSource();
+  source.buffer = buffer;
+  const gain = ac.createGain();
+  // 弱い接触は小さく、強い衝突ははっきり鳴らす
+  gain.gain.value = clamp(impact / 16, 0.35, 1) * SE_VOLUME;
+  source.connect(gain).connect(audioMaster);
+  source.start();
 }
 
 function playEnemyPopSound() {
@@ -2805,52 +2821,70 @@ function playUiPopSound(frequency = 220, volume = 0.05) {
   osc.stop(now + 0.11);
 }
 
-// 滑走音は sound/スロー_01.mp3 をループ再生し、石の速さに応じて音量を上下させる。
-// 石が止まったら自然にフェードアウトして停止する。
-const SLIDE_SE_SRC = "sound/%E3%82%B9%E3%83%AD%E3%83%BC_01.mp3";
-let slideSe = null;
+// 滑走音は sound/スロー_01.mp3 をWebAudioでループ再生し、石の速さで音量を上下させる。
+// ループ音源は鳴らしっぱなしにして、GainNodeの値だけを動かす(iOSでも音量が効く)。
+let slideSource = null;
+let slideSeGain = null;
 function updateSlideSound() {
-  if (!soundEnabled) {
-    if (slideSe && !slideSe.paused) slideSe.pause();
+  const ac = ensureAudio();
+  if (!ac || !soundEnabled) {
+    if (slideSeGain) slideSeGain.gain.value = 0;
     return;
   }
-  if (!slideSe) {
-    slideSe = new Audio(SLIDE_SE_SRC);
-    slideSe.loop = true;
-    slideSe.preload = "auto";
-    slideSe.volume = 0;
+  const buffer = seBuffers[SLIDE_SE_SRC];
+  if (!buffer) { loadSeBuffer(SLIDE_SE_SRC); return; }
+  if (!slideSource) {
+    slideSource = ac.createBufferSource();
+    slideSource.buffer = buffer;
+    slideSource.loop = true;
+    slideSeGain = ac.createGain();
+    slideSeGain.gain.value = 0;
+    slideSource.connect(slideSeGain).connect(audioMaster);
+    slideSource.start();
   }
   const movingSpeed = game.pieces.reduce((max, p) =>
     p.state === "onboard" ? Math.max(max, Math.hypot(p.vx, p.vy)) : max, 0
   );
   const motion = clamp((movingSpeed - 0.5) / 26, 0, 1);
-  const target = motion * 0.5;
-  // 急に鳴り止まないよう、現在音量から目標へなめらかに寄せる
-  slideSe.volume = clamp(slideSe.volume + (target - slideSe.volume) * 0.18, 0, 1);
-  if (target > 0.01) {
-    if (slideSe.paused) slideSe.play().catch(() => {});
-  } else if (!slideSe.paused && slideSe.volume < 0.02) {
-    slideSe.pause();
-  }
+  const target = motion * SE_VOLUME;
+  // 急に鳴り止まないよう、現在の音量から目標へなめらかに寄せる
+  slideSeGain.gain.value = clamp(slideSeGain.gain.value + (target - slideSeGain.gain.value) * 0.18, 0, 1);
 }
 
 /* ---------- サウンド(BGM+効果音)のON/OFF ----------
  * 右上の「サウンド」ボタン1つでBGMと効果音をまとめて切り替える。設定は端末に保存する。
  * モバイルは「ユーザー操作なしの自動再生」が禁止されているため、最初のタップでも再生を試みる。
  * -------------------------------------------------- */
+const BGM_VOLUME = 0.16; // BGMは控えめに(効果音を聞き取りやすくするため)
+let bgmGain = null;
 function bindSoundButton() {
   const audio = document.getElementById("bgm");
   const button = document.getElementById("soundToggleBtn");
   if (!audio || !button) return;
-  audio.volume = 0.45;
+  audio.volume = BGM_VOLUME; // PC向け。iOSでは無視されるのでWebAudio側のGainで効かせる
   try { soundEnabled = localStorage.getItem("sc_sound") !== "0"; } catch { soundEnabled = true; }
   const sync = () => {
     button.textContent = soundEnabled ? "サウンド ON" : "サウンド OFF";
     button.setAttribute("aria-pressed", soundEnabled ? "true" : "false");
     button.classList.toggle("off", !soundEnabled);
   };
+  // BGMもWebAudioを経由させる(iOSは<audio>のvolumeが効かないため)
+  const routeBgm = () => {
+    const ac = ensureAudio();
+    if (!ac || bgmGain) return;
+    try {
+      const src = ac.createMediaElementSource(audio);
+      bgmGain = ac.createGain();
+      bgmGain.gain.value = BGM_VOLUME;
+      src.connect(bgmGain).connect(ac.destination);
+      audio.volume = 1; // 音量調整はGain側に任せる
+    } catch (_) { /* 経路作成に失敗したら<audio>のvolumeのまま鳴らす */ }
+  };
   const tryPlay = () => {
     if (!soundEnabled) return;
+    routeBgm();
+    loadSeBuffer(HIT_SE_SRC);
+    loadSeBuffer(SLIDE_SE_SRC);
     audio.play().catch(() => {}); // 自動再生が拒否されても次のタップで再挑戦する
   };
   button.addEventListener("pointerdown", (e) => {
@@ -2858,7 +2892,7 @@ function bindSoundButton() {
     soundEnabled = !soundEnabled;
     try { localStorage.setItem("sc_sound", soundEnabled ? "1" : "0"); } catch {}
     if (soundEnabled) { tryPlay(); }
-    else { audio.pause(); if (slideSe && !slideSe.paused) slideSe.pause(); }
+    else { audio.pause(); if (slideSeGain) slideSeGain.gain.value = 0; }
     sync();
   });
   // 最初のユーザー操作で再生開始(以降は不要なので一度だけ)
@@ -3210,7 +3244,7 @@ function render() {
       ctx.lineWidth = 3;
       ctx.stroke();
       ctx.fillStyle = "#ffcf33";
-      ctx.font = `${Math.max(12, launcherRadius * 0.5)}px system-ui, sans-serif`;
+      ctx.font = `${Math.max(12, launcherRadius * 0.5)}px 'DotGothic16', system-ui, sans-serif`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("★", stoneX + launcherRadius * 0.95, stoneY - launcherRadius * 0.95);
       ctx.restore();
@@ -3222,10 +3256,7 @@ function render() {
     if (selectedCharacter?.mods?.trajectoryGuide) {
       drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideSelf);
     }
-    ctx.fillStyle = "#e91e63";
-    ctx.font = "700 13px 'DotGothic16', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("ねらいOK → まえへおす", launchBase.x, launchBase.y + launcherRadius + 24);
+    // 発射位置の下の案内文は表示しない(チュートリアル側で説明しているため)
   }
 
   // 共通ガイドは直線のみ。ユゥナリナだけは、最初に当たる石の飛ぶ方向も重ねて表示する。
