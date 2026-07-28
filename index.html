@@ -413,7 +413,8 @@
   .howToCopy { padding: 8px 9px 10px; font-size: 11px; line-height: 1.55; }
   .howToCopy b { display: block; margin-bottom: 2px; color: #e91e63; font-size: 13px; }
   .howToPager { position: sticky; bottom: 0; z-index: 2; display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; gap: 8px; padding: 9px 12px 12px; background: rgba(255,248,251,0.97); border-top: 1px solid #f7bfd1; }
-  .howToPager .btn { font-size: 12px; }
+  /* 端末のフォント差で「はじめる」が2行に折り返さないよう、折り返しを禁じる */
+  .howToPager .btn, .characterBookPager .btn { font-size: 12px; padding: 6px 4px; white-space: nowrap; }
   #howToPageLabel { text-align: center; color: #e91e63; font-size: 12px; letter-spacing: 3px; }
   #howToPrev:disabled { opacity: .35; }
   #characterBookOverlay {
@@ -4007,7 +4008,7 @@ function bindHowTo() {
   const renderPage = () => {
     document.querySelectorAll(".howToPage").forEach((el, index) => el.classList.toggle("active", index === page));
     prevButton.disabled = page === 0;
-    nextButton.textContent = page === 2 ? "はじめる！" : "つぎ";
+    nextButton.textContent = page === 2 ? "はじめる" : "つぎ";
     pageLabel.textContent = [0, 1, 2].map(index => index === page ? "●" : "○").join("  ");
     if (panel) panel.scrollTop = 0;
     requestAnimationFrame(() => { drawHowToShots(0); startHowToAnim(); });
