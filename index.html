@@ -32,10 +32,17 @@
     pointer-events: none;
   }
   #hud .label { opacity: 0.6; font-size: 10px; margin-right: 2px; }
+  /* 4つのボタンを2段2列で、すべて同じ大きさに揃える */
   #scenarioBar {
-    position: fixed; top: 6px; right: 6px;
-    display: flex; gap: 4px; z-index: 4;
+    position: fixed; top: 6px; right: 6px; z-index: 4;
+    display: grid; grid-template-columns: repeat(2, 84px); gap: 4px;
   }
+  #scenarioBar .btn {
+    height: 30px; padding: 0 4px; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    white-space: nowrap;
+  }
+  #soundToggleBtn.off { color: #9a8791; border-color: #d8c3cd; background: rgba(255,255,255,0.8); }
   .btn {
     background: rgba(255,255,255,0.96); color: #e91e63;
     border: 2px solid #f48fb1; border-radius: 10px;
@@ -220,16 +227,8 @@
   }
   /* 見出しと数値を左右に振り分け、数値は右揃えで桁が増えても位置が動かない */
   #scorePanel > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  /* BGMのON/OFF。操作の邪魔にならないよう左下(チュートリアルの下)に置く */
-  #bgmBtn {
-    position: fixed; left: 7px; top: calc(100% - 34px); z-index: 4;
-    width: var(--side-panel-width); box-sizing: border-box; text-align: center;
-    font-size: 9px; padding: 5px 2px; opacity: 0.8;
-  }
-  #bgmBtn.playing { color: #fff; background: #e91e63; border-color: #e91e63; }
-  body.ui-swapped #bgmBtn { left: auto; right: 7px; }
   body.ui-swapped #allOutBtn { right: auto; left: 7px; }
-  /* デバッグ用「ぜんぶ出す」:ソケットの真下に仮置き(最終的には削除する) */
+  /* デバッグ用ボタン:ソケットの真下に仮置き(最終的には削除する) */
   #allOutBtn {
     position: fixed; right: 7px; top: calc(100% - 34px); z-index: 4;
     width: var(--side-panel-width); box-sizing: border-box; text-align: center;
@@ -486,9 +485,10 @@
   <button class="btn" id="howToBtn">遊び方</button>
   <button class="btn" id="trickBookBtn">トリック</button>
   <button class="btn" id="characterBookBtn">キャラクター</button>
+  <button class="btn" id="soundToggleBtn" aria-pressed="true">サウンド ON</button>
 </div>
 <!-- デバッグ用。最終的には削除する -->
-<button class="btn" id="allOutBtn" aria-pressed="false">ぜんぶ出す OFF</button>
+<button class="btn" id="allOutBtn" aria-pressed="false">デバッグ OFF</button>
 <div id="handBar" aria-label="キャラストーン手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
@@ -512,7 +512,6 @@
   </div>
 </div>
 <audio id="bgm" src="sound/%E3%83%A1%E3%82%A4%E3%83%B3_01.mp3" loop preload="auto"></audio>
-<button class="btn" id="bgmBtn" aria-pressed="false">♪ BGM</button>
 <button class="btn" id="fastForwardBtn">はやおくり</button>
 <div id="throwTutorial">
   <div id="tutorialControls"><button id="tutorialToggle" type="button" aria-expanded="true">かくす</button><button id="swapUiBtn" type="button">いれかえ</button></div>
@@ -2695,7 +2694,7 @@ let audioCtx = null;
 let audioMaster = null;
 let slideGain = null;
 let slideFilter = null;
-let soundEnabled = false; // 全サウンドをフラットに0(一部キャラの滑走音しか鳴っていない現状を踏まえ、いったん無音化)
+let soundEnabled = true; // 効果音(ヒット/スロー)を実ファイル再生に置き換えたので既定でON
 const collisionPairTimes = new Map();
 
 function ensureAudio() {
@@ -2748,28 +2747,26 @@ function registerCollisionHit(a, b, impact) {
   playCollisionSound(impact);
 }
 
-function playCollisionSound(impact) {
-  const ac = ensureAudio();
-  if (!ac || !soundEnabled) return;
-  const now = ac.currentTime;
-  const strength = clamp(impact / 18, 0.18, 1);
-  const hitGain = ac.createGain();
-  hitGain.gain.setValueAtTime(0.0001, now);
-  hitGain.gain.exponentialRampToValueAtTime(0.14 * strength, now + 0.004);
-  hitGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-  hitGain.connect(audioMaster);
-  const base = 150 + Math.min(impact, 20) * 4 + (Math.random() - 0.5) * 10;
-  for (const [ratio, volume, type] of [[1, 1, "sine"], [2.15, 0.2, "triangle"]]) {
-    const osc = ac.createOscillator();
-    const partialGain = ac.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(base * ratio * 1.28, now);
-    osc.frequency.exponentialRampToValueAtTime(base * ratio, now + 0.055);
-    partialGain.gain.value = volume;
-    osc.connect(partialGain).connect(hitGain);
-    osc.start(now);
-    osc.stop(now + 0.2);
+// 衝突音は sound/ヒット_01.mp3 を再生する。重なっても鳴らせるよう、同じ音源を複数用意して使い回す。
+// 音量は衝突の強さに応じて変える(弱い接触は小さく)。
+const HIT_SE_SRC = "sound/%E3%83%92%E3%83%83%E3%83%88_01.mp3";
+const hitSePool = [];
+let hitSeIndex = 0;
+function ensureHitSePool() {
+  if (hitSePool.length) return;
+  for (let i = 0; i < 4; i++) {
+    const audio = new Audio(HIT_SE_SRC);
+    audio.preload = "auto";
+    hitSePool.push(audio);
   }
+}
+function playCollisionSound(impact) {
+  if (!soundEnabled) return;
+  ensureHitSePool();
+  const audio = hitSePool[hitSeIndex];
+  hitSeIndex = (hitSeIndex + 1) % hitSePool.length;
+  audio.volume = clamp(impact / 22, 0.15, 1) * 0.7;
+  try { audio.currentTime = 0; audio.play().catch(() => {}); } catch (_) {}
 }
 
 function playEnemyPopSound() {
@@ -2808,66 +2805,67 @@ function playUiPopSound(frequency = 220, volume = 0.05) {
   osc.stop(now + 0.11);
 }
 
+// 滑走音は sound/スロー_01.mp3 をループ再生し、石の速さに応じて音量を上下させる。
+// 石が止まったら自然にフェードアウトして停止する。
+const SLIDE_SE_SRC = "sound/%E3%82%B9%E3%83%AD%E3%83%BC_01.mp3";
+let slideSe = null;
 function updateSlideSound() {
-  if (!audioCtx || !slideGain || !soundEnabled) return;
+  if (!soundEnabled) {
+    if (slideSe && !slideSe.paused) slideSe.pause();
+    return;
+  }
+  if (!slideSe) {
+    slideSe = new Audio(SLIDE_SE_SRC);
+    slideSe.loop = true;
+    slideSe.preload = "auto";
+    slideSe.volume = 0;
+  }
   const movingSpeed = game.pieces.reduce((max, p) =>
     p.state === "onboard" ? Math.max(max, Math.hypot(p.vx, p.vy)) : max, 0
   );
-  const motion = clamp((movingSpeed - 0.08) / 30, 0, 1);
-  const targetGain = motion * 0.042;
-  slideGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
-  const digitalSweep = Math.sin(performance.now() * 0.008) * 140 * motion;
-  slideFilter.frequency.setTargetAtTime(1900 + Math.min(movingSpeed, 35) * 34 + digitalSweep, audioCtx.currentTime, 0.08);
+  const motion = clamp((movingSpeed - 0.5) / 26, 0, 1);
+  const target = motion * 0.5;
+  // 急に鳴り止まないよう、現在音量から目標へなめらかに寄せる
+  slideSe.volume = clamp(slideSe.volume + (target - slideSe.volume) * 0.18, 0, 1);
+  if (target > 0.01) {
+    if (slideSe.paused) slideSe.play().catch(() => {});
+  } else if (!slideSe.paused && slideSe.volume < 0.02) {
+    slideSe.pause();
+  }
 }
 
-/* ---------- BGM ----------
- * モバイルは「ユーザー操作なしの自動再生」が禁止されているため、最初のタップで再生を試みる。
- * ON/OFFは端末に保存し、次回以降は設定を引き継ぐ。効果音とは独立(効果音は現在OFF)。
- * ------------------------- */
-let bgmEnabled = false;
-function bindBgmButton() {
+/* ---------- サウンド(BGM+効果音)のON/OFF ----------
+ * 右上の「サウンド」ボタン1つでBGMと効果音をまとめて切り替える。設定は端末に保存する。
+ * モバイルは「ユーザー操作なしの自動再生」が禁止されているため、最初のタップでも再生を試みる。
+ * -------------------------------------------------- */
+function bindSoundButton() {
   const audio = document.getElementById("bgm");
-  const button = document.getElementById("bgmBtn");
+  const button = document.getElementById("soundToggleBtn");
   if (!audio || !button) return;
   audio.volume = 0.45;
-  try { bgmEnabled = localStorage.getItem("sc_bgm") !== "0"; } catch { bgmEnabled = true; }
+  try { soundEnabled = localStorage.getItem("sc_sound") !== "0"; } catch { soundEnabled = true; }
   const sync = () => {
-    button.textContent = bgmEnabled ? "♪ BGM ON" : "♪ BGM OFF";
-    button.setAttribute("aria-pressed", bgmEnabled ? "true" : "false");
-    button.classList.toggle("playing", bgmEnabled && !audio.paused);
+    button.textContent = soundEnabled ? "サウンド ON" : "サウンド OFF";
+    button.setAttribute("aria-pressed", soundEnabled ? "true" : "false");
+    button.classList.toggle("off", !soundEnabled);
   };
   const tryPlay = () => {
-    if (!bgmEnabled) return;
-    audio.play().then(sync).catch(() => {}); // 自動再生が拒否されても次のタップで再挑戦する
+    if (!soundEnabled) return;
+    audio.play().catch(() => {}); // 自動再生が拒否されても次のタップで再挑戦する
   };
   button.addEventListener("pointerdown", (e) => {
     e.stopPropagation(); e.preventDefault();
-    bgmEnabled = !bgmEnabled;
-    try { localStorage.setItem("sc_bgm", bgmEnabled ? "1" : "0"); } catch {}
-    if (bgmEnabled) tryPlay(); else audio.pause();
+    soundEnabled = !soundEnabled;
+    try { localStorage.setItem("sc_sound", soundEnabled ? "1" : "0"); } catch {}
+    if (soundEnabled) { tryPlay(); }
+    else { audio.pause(); if (slideSe && !slideSe.paused) slideSe.pause(); }
     sync();
   });
-  audio.addEventListener("play", sync);
-  audio.addEventListener("pause", sync);
   // 最初のユーザー操作で再生開始(以降は不要なので一度だけ)
   const unlock = () => { tryPlay(); window.removeEventListener("pointerdown", unlock, true); };
   window.addEventListener("pointerdown", unlock, true);
   sync();
   tryPlay();
-}
-
-function bindSoundButton() {
-  const button = document.getElementById("soundBtn");
-  if (!button) return; // 🔊ボタンは廃止(無音化)
-  button.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    soundEnabled = !soundEnabled;
-    button.textContent = soundEnabled ? "🔊" : "🔇";
-    button.setAttribute("aria-pressed", String(soundEnabled));
-    if (soundEnabled) unlockAudio();
-    if (slideGain && audioCtx) slideGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02);
-  });
 }
 
 /* ---------- ソケット内の石のドリフト(お遊び) ----------
@@ -3624,7 +3622,7 @@ function bindAllOutButton() {
   const saved = localStorage.getItem("sc_allOut");
   if (saved === "1") game.allOutMode = true;
   const sync = () => {
-    button.textContent = game.allOutMode ? "ぜんぶ出す ON" : "ぜんぶ出す OFF";
+    button.textContent = game.allOutMode ? "デバッグ ON" : "デバッグ OFF";
     button.setAttribute("aria-pressed", game.allOutMode ? "true" : "false");
     button.classList.toggle("active", game.allOutMode);
   };
@@ -3911,7 +3909,6 @@ bindUiSwap();
 bindHowTo();
 bindCharacterBook();
 bindTrickBook();
-bindBgmButton();
 bindSoundButton();
 bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
 buildSurvivalGame();
