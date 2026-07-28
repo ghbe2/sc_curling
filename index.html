@@ -539,12 +539,12 @@
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
   <div id="howToPanel">
     <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose" aria-label="遊び方を閉じる">×</button></div>
-    <p class="howToLead">まんなかの💝に近づけるな！</p>
+    <p class="howToLead">ハウスの まんなか(ボタン)の 💝に 近づけるな！</p>
     <div id="howToPages">
     <div class="howToPage active" data-page="0">
       <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① 💝を守ろう</b>すこしずつハートへ迫る敵を、ハウスの外へはじき出そう。</div></article>
       <article class="howToCard"><canvas class="howToShot" data-scene="pinch"></canvas><div class="howToCopy"><b>② 重なったらピンチ！</b>敵が💝に重なったら、そのターンで弾けないとゲームオーバー。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>③ 侵入に注意</b>敵がハウスの中央に迫ると、外から新しい敵がやって来るよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>③ 侵入に注意</b>敵がボタン（ハウスの中心）に迫ると、外から新しい敵がやって来るよ。</div></article>
     </div>
     <div class="howToPage" data-page="1">
       <article class="howToCard"><canvas class="howToShot" data-scene="throw"></canvas><div class="howToCopy"><b>④ えらんで、ねらって、おしだす</b>強く押せばはやく、やさしく押せばおそく進むよ。</div></article>
@@ -600,19 +600,17 @@ const CONFIG = {
   ENEMY_UNLOCK_EVERY: 10,   // 敵は何ターンごとに増えるか
   ENEMY_UNLOCK_STEP: 1,     // 敵は1回に何種増えるか(10ターンごとに1種)
   SCORE_WAVE_CLEAR: 1000,
-  SCORE_NOTE_CYCLE: 800,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 0,         // 生存ターンの加点は廃止(0)。スコアはテイクとトリックで稼ぐ
   SCORE_TAKEOUT: 100,    // 敵を1体テイクアウトしたときの得点
-  SCORE_THROUGH_PENALTY: 120, // スルー(何にも当たらずハウスも素通り)の減点
   // ランクはスコアで達成する。到達した最大のものを表示する
   SCORE_RANKS: [
-    { score: 0,     name: "ルーキー",       icon: "🌱" },
-    { score: 1500,  name: "みならい",       icon: "🥉" },
-    { score: 5000,  name: "スイーパー",     icon: "🥈" },
-    { score: 12000, name: "スキップ",       icon: "🥇" },
-    { score: 25000, name: "アイスの支配者", icon: "👑" },
-    { score: 50000, name: "しゅがけ神",     icon: "🏆" },
+    { score: 0,     name: "ぴよぴよタイム",     icon: "🌱" },
+    { score: 1500,  name: "そだメェ～",         icon: "🥉" },
+    { score: 5000,  name: "ニャっぷ！",         icon: "🥈" },
+    { score: 12000, name: "がウォー！",         icon: "🥇" },
+    { score: 25000, name: "にゃいす～！！",     icon: "👑" },
+    { score: 50000, name: "わいるどえんだー！", icon: "🏆" },
   ],
   SCORE_BOARD_MAX: 0,    // 盤面支配の加点は廃止(0)
   FRICTION: 0.985,       // 高速域の基本速度減衰率
@@ -809,7 +807,11 @@ const game = {
   aim: null,
   lockedAim: null,
   chainCountThisThrow: 0,
-  raiseTakeThisThrow: false,
+  raiseTakeThisThrow: false,   // 手前のなかまをぶつけてテイクした(ランバック判定用)
+  directTakeThisThrow: false,  // 投げたキャラが自分でテイクした(ヒットアンド〜/ピール判定用)
+  shotContact: null,           // 投げたキャラが最初にぶつかった地点
+  shotScoreMult: 1,            // 投げたキャラのスコア倍率(マユゥ)を投球単位で控える
+  outsideAlliesBeforeShot: null, // 投球前にハウスの外にいたなかま(ロールイン判定用)
   buttonDrawThisThrow: false,
   passedThroughPort: false, // 石と石の間を通した(スルー・ザ・ポート)
   guardBeforeShot: false,   // 投球前、ハウス手前にガードがあったか(カム・アラウンド判定用)
@@ -841,13 +843,10 @@ const game = {
   score: {
     enemyTakeouts: 0,
     waveBonus: 0,
-    noteBonus: 0,
     characterBonus: 0,
     trickBonus: 0,
     throughPenalty: 0,
   },
-  noteHits: 0,
-  noteBonusAwardedThisThrow: false,
   wave: 1,
   enemySerial: 0,
   enemyPostMoveApplied: false,
@@ -869,17 +868,24 @@ const ENEMIES = [
 
 // トリック(ショットの呼称)の一覧。表示・採点・一覧パネルをこの定義だけで賄う。
 // 上にあるものほど優先(1投につき最上位の1件だけが成立する)。
+// 用語:プレイエリア=画面ぜんたい(出たキャラは取り除かれる) / ハウス=円 / ボタン=円の中心
+// group を共有するトリックどうしは競合し、いちばん強い1件だけが成立する。
+// group が違えば同時に成立してよい(例:トリプルテイク+ヒットアンドロール)。
+// rank は同じ group の中での強さ。
 const TRICKS = [
-  { id: "takeout",    label: "ていくあうとっ！",     name: "テイクアウト",       score: 50,   desc: "敵を ハウスの外へ 出す。" },
-  { id: "raise",      label: "れいずていくっ！",     name: "レイズテイク",       score: 200,  desc: "なかまを 当てて 間接的に テイク。" },
-  { id: "double",     label: "だぶるていくっ!!",     name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
-  { id: "triple",     label: "とりぷるていくっ!!!",  name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
-  { id: "inPlay",     label: "いんぷれい！",         name: "インプレイ",         score: 100,  desc: "自分の キャラが ハウスに 残る。" },
-  { id: "tee",        label: "てぃーしょっとっ！",   name: "ティーショット",     score: 300,  desc: "何にも 当てずに ボタンの上に 止める。" },
-  { id: "comeAround", label: "かむ・あらうんどっ！", name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
-  { id: "freeze",     label: "ふりーずっ！",         name: "フリーズショット",   score: 250,  desc: "敵の すぐ手前に ぴたりと 止める。" },
-  { id: "port",       label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500, desc: "キャラの すきまを 当たらずに 通す。" },
-  { id: "through",    label: "するー…",             name: "スルー",             score: -120, desc: "何にも 当たらず ハウスも 素通り。(減点)" },
+  { id: "takeout",    group: "take",  rank: 1, label: "ていくあうとっ！",       name: "テイクアウト",       score: 50,   desc: "敵を ハウスの外へ 出す。" },
+  { id: "double",     group: "take",  rank: 2, label: "だぶるていくっ!!",       name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
+  { id: "triple",     group: "take",  rank: 3, label: "とりぷるていくっ!!!",    name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
+  { id: "hitAndStay", group: "after", rank: 1, label: "ひっと・あんど・すてい！", name: "ヒットアンドステイ", score: 300,  desc: "敵を ハウスの外へ 出して、投げた キャラは その場に 残る。" },
+  { id: "hitAndRoll", group: "after", rank: 1, label: "ひっと・あんど・ろーるっ！", name: "ヒットアンドロール", score: 200, desc: "敵を ハウスの外へ 出して、投げた キャラは 少しだけ 動く。" },
+  { id: "runback",    group: "after", rank: 2, label: "らんばっくっ！",         name: "ランバック",         score: 500,  desc: "手前の なかまを ぶつけて テイクし、その なかまを ハウスに 残す。" },
+  { id: "peel",       group: "after", rank: 1, label: "ぴーるっ！",             name: "ピール",             score: 150,  desc: "敵を ハウスの外へ 出して、投げた キャラも プレイエリアの外へ。" },
+  { id: "tee",        group: "draw",  rank: 1, label: "てぃーしょっとっ！",     name: "ティーショット",     score: 300,  desc: "投げた キャラを ボタンの上に 止める。" },
+  { id: "comeAround", group: "draw",  rank: 2, label: "かむ・あらうんどっ！",   name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
+  { id: "rollIn",     group: "rollIn",rank: 1, label: "ろーるいんっ！",         name: "ロールイン",         score: 250,  desc: "ハウスの外の なかまを 動かして ハウスに 入れる。" },
+  { id: "freeze",     group: "freeze",rank: 1, label: "ふりーずっ！",           name: "フリーズショット",   score: 250,  desc: "敵を 出さずに、その すぐ手前で ぴたりと 止める。" },
+  { id: "port",       group: "port",  rank: 1, label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500,  desc: "キャラの すきまを 当たらずに 通す。" },
+  { id: "through",    group: "miss",  rank: 1, label: "するー…",               name: "スルー",             score: -120, desc: "何にも 当たらず ハウスにも 残らない。(減点)" },
 ];
 const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
 
@@ -1438,7 +1444,8 @@ function toggleGinaForms() {
 
 function enemyTakeGuardMessage(enemy) {
   if (enemyAbilitySuppressed(enemy) || enemy.lastHitIgnoredAbilities) return "";
-  if (enemy.enemyId === "pride" && enemy.lastTakeRoute !== "raise") return "れいずでねらって！";
+  // 「レイズ」はトリック名から外したので、操作として伝わる言い方にする
+  if (enemy.enemyId === "pride" && enemy.lastTakeRoute !== "raise") return "なかまを ぶつけて！";
   if (enemy.enemyId === "lust") return "ゆっくりねらって！"; // 速い球ほど効かない
   return "";
 }
@@ -1459,7 +1466,11 @@ function buildSurvivalGame() {
   game.pendingHandIndex = null;
   game.chainCountThisThrow = 0;
   game.raiseTakeThisThrow = false;
+  game.directTakeThisThrow = false;
   game.buttonDrawThisThrow = false;
+  game.shotContact = null;
+  game.shotScoreMult = 1;
+  game.outsideAlliesBeforeShot = new Set();
   game.toastTimer = 0;
   game.toastQueue = [];
   game.fastForward = 1;
@@ -1470,13 +1481,10 @@ function buildSurvivalGame() {
   game.turnAlertLevel = "none";
   game.score.enemyTakeouts = 0;
   game.score.waveBonus = 0;
-  game.score.noteBonus = 0;
   game.score.characterBonus = 0;
   game.score.trickBonus = 0;
   game.score.throughPenalty = 0;
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
-  game.noteHits = 0;
-  game.noteBonusAwardedThisThrow = false;
   game.hitStopFrames = 0;
   game.fxRings = [];
   game.fxParticles = [];
@@ -1854,15 +1862,21 @@ function throwPiece(params) {
   game.stagedEvolved = false; // 投げたら合体状態はリセット
   game.chainCountThisThrow = 0;
   game.raiseTakeThisThrow = false;
+  game.directTakeThisThrow = false;
   game.buttonDrawThisThrow = false;
   game.passedThroughPort = false;
   game.shotHitSomething = false;
+  game.shotContact = null;
+  game.shotScoreMult = p.mods.scoreMult ?? 1; // マユゥなどの倍率を投球単位で控える
+  // ロールイン判定用:投球前、ハウスの外にいたなかまを覚えておく
+  game.outsideAlliesBeforeShot = new Set(
+    game.pieces.filter(g => g !== p && g.role === "player" && g.state === "onboard" &&
+      Math.hypot(g.x, g.y) > CONFIG.HOUSE_RADIUS).map(g => g.uid)
+  );
   // カム・アラウンド判定用:投球前にハウス手前(投げる側)にガードがあったかを覚えておく
   game.guardBeforeShot = game.pieces.some(g =>
     g !== p && g.state === "onboard" && g.y > CONFIG.HOUSE_RADIUS * 0.5 &&
     Math.hypot(g.x, g.y) < CONFIG.HOUSE_RADIUS * 2.2);
-  game.noteHits = 0;
-  game.noteBonusAwardedThisThrow = false;
   game.fastForward = 1; // 新しい投球の滑走は通常速度から始める(早送りは止まりかけで自動的にかかる)
   renderHand();
 }
@@ -2195,7 +2209,8 @@ function detectPortPass(shot) {
 function handleAllPiecesSettled() {
   if (game.phase === "playerMoving") {
     const currentShot = game.pieces.find(p => p.isCurrentShot && p.state === "onboard");
-    if (currentShot && !currentShot.buttonDrawAwarded && !currentShot.hasCollided &&
+    // ティーショットは「何にも当てずに」を条件にしない。当てた結果ボタンに乗っても成立する。
+    if (currentShot && !currentShot.buttonDrawAwarded &&
         Math.hypot(currentShot.x, currentShot.y) <= CONFIG.HOUSE_RADIUS / 12) {
       currentShot.buttonDrawAwarded = true;
       game.buttonDrawThisThrow = true;
@@ -2424,7 +2439,14 @@ function physicsStep() {
           T.hasCollided = true;
           // 投げた石が何かに当たったことを投球単位で記録する。石が盤外へ出て消えても残るので、
           // 「当たったのにスルー判定になる」誤判定を防げる
-          if (S.isCurrentShot || T.isCurrentShot) game.shotHitSomething = true;
+          if (S.isCurrentShot || T.isCurrentShot) {
+            game.shotHitSomething = true;
+            // ヒットアンドステイ/ロールの判定用に、最初にぶつかった地点を覚えておく
+            if (!game.shotContact) {
+              const shotPiece = S.isCurrentShot ? S : T;
+              game.shotContact = { x: shotPiece.x, y: shotPiece.y };
+            }
+          }
           // 投げた石から受け取った運動を次の石へ伝える。投げた石自身ではなく、
           // その影響を受けた別の石が敵を飛ばした場合をレイズテイクとして記録する。
           if ((S.isCurrentShot || S.indirectFromShot) && !T.isCurrentShot) {
@@ -2602,11 +2624,13 @@ function physicsStep() {
           } else {
             game.chainCountThisThrow++;
             game.score.enemyTakeouts++;
-            const currentShot = game.pieces.find(piece => piece.isCurrentShot);
-            const scoreMult = currentShot?.mods?.scoreMult ?? 1;
+            const scoreMult = game.shotScoreMult ?? 1;
             if (scoreMult > 1) game.score.characterBonus += CONFIG.SCORE_TAKEOUT * (scoreMult - 1);
             addImpactFx(p.x, p.y, 5, true);
+            // 投げたキャラが自分で出したのか(ヒットアンド〜/ピール)、
+            // 手前のなかまをぶつけて出したのか(ランバック)を分けて覚える
             if (p.takeWasRaise) game.raiseTakeThisThrow = true;
+            else game.directTakeThisThrow = true;
           }
         }
       }
@@ -2675,22 +2699,22 @@ function physicsStep() {
   updateHUD();
 }
 
-function showChainToast(n) {
-  const names = { 2: "だぶるていくっ!!", 3: "とりぷるていくっ!!!" };
-  if (names[n]) showScoreEvent(names[n]);
-}
-
-// ショットの呼称。優先度の高いもの1件だけを出す。
-// トリプル＞ダブル＞レイズ＞カムアラウンド＞ティー(ボタンドロー)＞フリーズ＞テイク
-// ＞スルー・ザ・ポート＞インプレイ＞スルー(減点)
+// ショットの呼称。groupごとに、いちばん強い1件が成立する。
+// 同じgroupのトリックだけが競合し、groupが違えば同時に成立してよい。
+//   take   : テイク → ダブル → トリプル
+//   after  : ヒットアンドステイ / ヒットアンドロール / ピール → ランバック
+//   draw   : ティーショット → カム・アラウンド
+//   rollIn / freeze / port / miss : それぞれ独立
 function showBestShotResult() {
   const shot = game.pieces.find(p => p.isCurrentShot && p.state === "onboard");
   const shotR = shot ? Math.hypot(shot.x, shot.y) : Infinity;
+  // 投げたキャラがプレイエリアの外へ出たか(消えた後も判定できるようフラグから見る)
+  const shotLeftArea = !shot;
 
-  // 何かに当たったか(盤外へ消えた後も残る投球単位のフラグで見る)
+  // 何かに当たったか(プレイエリア外へ消えた後も残る投球単位のフラグで見る)
   const hitSomething = Boolean(game.shotHitSomething);
 
-  // フリーズ:何にも当てずに、敵の石のすぐ手前でぴたりと止まった
+  // フリーズ:敵を出さずに、その石のすぐ手前でぴたりと止まった
   let freeze = false;
   if (shot && !hitSomething) {
     for (const e of game.pieces) {
@@ -2700,32 +2724,63 @@ function showBestShotResult() {
       if (d <= touching * 1.35 && shotR > CONFIG.HOUSE_RADIUS / 12) { freeze = true; break; }
     }
   }
-  // スルー:何にも当たらず、ハウスにも残らなかった(盤外へ消えた場合も含む)
+  // スルー:何にも当たらず、ハウスにも残らなかった(プレイエリア外へ消えた場合も含む)
   const stayedInHouse = Boolean(shot && shot.entered && shotR <= CONFIG.HOUSE_RADIUS);
   const through = !hitSomething && game.chainCountThisThrow === 0
     && !game.passedThroughPort && !freeze && !stayedInHouse;
-  // インプレイ:自分の石がハウスに残った
-  const inPlay = game.pieces.some(p => p.role === "player" && p.state === "onboard" &&
+
+  // ランバック:手前のなかまをぶつけてテイクし、そのなかまがハウスに残った
+  const runback = game.raiseTakeThisThrow && game.pieces.some(p =>
+    p.role === "player" && p.state === "onboard" && p.indirectFromShot &&
+    Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
+  // ロールイン:ハウスの外にいたなかまが、この投球で動いてハウスに入った
+  const rollIn = game.pieces.some(p =>
+    p.role === "player" && p.state === "onboard" && p.indirectFromShot &&
+    game.outsideAlliesBeforeShot?.has(p.uid) &&
     Math.hypot(p.x, p.y) <= CONFIG.HOUSE_RADIUS);
 
-  // 成立したトリックを優先度順に1件だけ選び、呼称の表示とボーナス加点をまとめて行う
-  let trickId = null;
-  if (game.chainCountThisThrow >= 3) trickId = "triple";
-  else if (game.chainCountThisThrow >= 2) trickId = "double";
-  else if (game.raiseTakeThisThrow) trickId = "raise";
-  else if (game.buttonDrawThisThrow && game.guardBeforeShot) trickId = "comeAround";
-  else if (game.buttonDrawThisThrow) trickId = "tee";
-  else if (freeze) trickId = "freeze";
-  else if (game.chainCountThisThrow >= 1) trickId = "takeout";
-  else if (game.passedThroughPort) trickId = "port";
-  else if (inPlay) trickId = "inPlay";
-  else if (through) trickId = "through";
+  // 投げたキャラが自分でテイクしたときの、そのキャラの結末
+  let afterId = null;
+  if (runback) afterId = "runback";
+  else if (game.directTakeThisThrow) {
+    if (shotLeftArea) afterId = "peel";
+    else if (game.shotContact) {
+      // ぶつかった地点からどれだけ転がったか。キャラ1個ぶん未満なら「その場に残った」
+      const rolled = Math.hypot(shot.x - game.shotContact.x, shot.y - game.shotContact.y);
+      afterId = rolled <= pieceRadius(shot) ? "hitAndStay" : "hitAndRoll";
+    }
+  }
 
-  if (!trickId) return;
+  const trickIds = [];
+  if (game.chainCountThisThrow >= 3) trickIds.push("triple");
+  else if (game.chainCountThisThrow >= 2) trickIds.push("double");
+  else if (game.chainCountThisThrow >= 1) trickIds.push("takeout");
+  if (afterId) trickIds.push(afterId);
+  if (game.buttonDrawThisThrow) trickIds.push(game.guardBeforeShot ? "comeAround" : "tee");
+  if (rollIn) trickIds.push("rollIn");
+  if (freeze) trickIds.push("freeze");
+  if (game.passedThroughPort) trickIds.push("port");
+  if (through) trickIds.push("through");
+  for (const id of trickIds) awardTrick(id);
+}
+
+// トリック1件ぶんの呼称表示と加点。マユゥなどの倍率はここでまとめてかける。
+function awardTrick(trickId) {
   const trick = TRICK_BY_ID[trickId];
-  showScoreEvent(trick.score > 0 ? `${trick.label} +${trick.score}` : trick.label);
-  if (trick.score > 0) game.score.trickBonus = (game.score.trickBonus ?? 0) + trick.score;
-  if (trick.score < 0) game.score.throughPenalty = (game.score.throughPenalty ?? 0) + (-trick.score);
+  if (!trick) return;
+  if (trick.score < 0) {
+    // 減点は倍率の対象外(「スコアが2倍もらえる」なので、損は増やさない)
+    showScoreEvent(trick.label);
+    game.score.throughPenalty = (game.score.throughPenalty ?? 0) + (-trick.score);
+    return;
+  }
+  // 倍率は投球時に控えた値を使う。ピールのように投げたキャラがプレイエリアの外へ
+  // 消えていると、盤上から探しても見つからず倍率が落ちてしまうため。
+  const scoreMult = game.shotScoreMult ?? 1;
+  const gained = Math.round(trick.score * scoreMult);
+  showScoreEvent(`${trick.label} +${gained}`);
+  game.score.trickBonus = (game.score.trickBonus ?? 0) + trick.score;
+  if (scoreMult > 1) game.score.characterBonus += gained - trick.score;
 }
 
 function showScoreEvent(text) {
@@ -2735,7 +2790,7 @@ function showScoreEvent(text) {
   event.className = "scoreEvent";
   event.textContent = text;
   feed.appendChild(event);
-  while (feed.children.length > 3) feed.firstElementChild.remove();
+  while (feed.children.length > 4) feed.firstElementChild.remove();
   window.setTimeout(() => event.remove(), 2550);
 }
 
@@ -3561,12 +3616,11 @@ function calculateScore() {
   const takeout = game.score.enemyTakeouts * CONFIG.SCORE_TAKEOUT;
   const board = calculateBoardControl();
   const waveBonus = game.score.waveBonus;
-  const noteBonus = game.score.noteBonus;
   const characterBonus = game.score.characterBonus;
   const trickBonus = game.score.trickBonus ?? 0;          // トリック成立のボーナス
   const throughPenalty = game.score.throughPenalty ?? 0;  // スルーの減点(合計は0未満にしない)
-  const total = Math.max(0, survival + takeout + board + waveBonus + noteBonus + characterBonus + trickBonus - throughPenalty);
-  return { survivedTurns, survival, takeout, board, waveBonus, noteBonus, characterBonus, trickBonus, throughPenalty, total };
+  const total = Math.max(0, survival + takeout + board + waveBonus + characterBonus + trickBonus - throughPenalty);
+  return { survivedTurns, survival, takeout, board, waveBonus, characterBonus, trickBonus, throughPenalty, total };
 }
 
 function updateDangerAlert() {
@@ -3593,7 +3647,7 @@ function updateHUD() {
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
   const score = calculateScore();
   updateDangerAlert();
-  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.noteBonus + "|" + score.characterBonus + "|" + game.noteHits;
+  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.characterBonus + "|" + score.trickBonus + "|" + score.throughPenalty;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("totalScoreText").textContent = score.total;
