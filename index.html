@@ -97,10 +97,8 @@
     color: #ffcf33; text-shadow: 0 0 4px rgba(255,180,0,0.9), 0 1px 2px rgba(120,60,0,0.5);
     animation: selectedFloat 0.9s ease-in-out infinite alternate;
   }
-  /* 選択中は枠だけで示す(位置はドリフトのtransformが受け持つので上下アニメはしない) */
-  .handCard.selected {
-    box-shadow: 0 0 0 3px rgba(233,30,99,0.5), 0 5px 16px rgba(80,30,50,0.2);
-  }
+  /* 投げる位置にセット済みのスロット。石はそこに無いので、空きより少しだけ濃く示す */
+  .handCard.empty.staged { border-style: solid; border-color: rgba(233,30,99,0.42); }
   .handCard.entering { animation: cardRefill 0.46s cubic-bezier(.2,1.45,.45,1); }
   @keyframes selectedFloat { from { transform: translateY(0) scale(1); } to { transform: translateY(-3px) scale(1.025); } }
   @keyframes cardRefill { 0% { opacity: 0; transform: translateY(-28px) scale(.72) rotate(-5deg); } 70% { opacity: 1; transform: translateY(3px) scale(1.05) rotate(1deg); } 100% { transform: none; } }
@@ -849,13 +847,13 @@ const game = {
 // 能力テキストは味方と同じレギュレーション(「あてた」=自分から/「あたった」=相手から、
 // 対象表記なし=敵味方問わず、「味方に」「敵に」で限定)で統一する
 const ENEMIES = [
-  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "味方に あたったとき 分身を 生む。" },
-  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "味方に あたったとき 小さく 弱くする。" },
+  { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "なかまに あたったとき 分身を 生む。" },
+  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "なかまに あたったとき 小さく 飛びやすく する。" },
   { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い石が あたったとき 飛びづらい。" },
   { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "速く 近づき まわりを 弾く。" },
-  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "あてたときは 飛ばない。飛ばした石なら 飛ぶ。" },
-  { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "ジーナは 敵に、マミは 味方に あたったとき 飛びづらい。" },
-  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "敵に あたったとき 大きく 重くする。" },
+  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "じかに あてても 飛びにくい。飛ばした石なら 飛ぶ。" },
+  { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "毎ターン 姿が 変わる。ジーナは 敵に、マミは なかまに 飛ばされにくい。" },
+  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "あたった あいてを 大きく 飛びにくく する。" },
 ];
 
 // トリック(ショットの呼称)の一覧。表示・採点・一覧パネルをこの定義だけで賄う。
@@ -879,7 +877,9 @@ const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
 //  対象の表記なし = 敵味方問わず、「敵に」「味方に」= その対象に限定
 const CHARACTERS = [
   { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "カーブ しづらい。", mods: { pathCurveMult: 0.15 } },
-  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。", mods: { knockResist: 0.22 } },
+  // ベルペット:その場から動きづらいガード役。ただしウーヨンの爆風だけは効いて弾かれる
+  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。ウーヨンには 弱い。",
+    mods: { knockResist: 0.22, weakToBlast: 1.8 } },
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "味方に あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
   { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてたとき 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
@@ -889,8 +889,10 @@ const CHARACTERS = [
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの 敵を 引き寄せる。", mods: { enemyAttractor: true } },
   { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に あてたとき 止まりやすい。", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スコアが 2倍 もらえる。", mods: { scoreMult: 2 } },
-  // ユゥナリナ:ベルペットの逆。弱い当たりでもよく飛び、当たった先も飛ばしやすい(レイズテイク向き)
-  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "あたったとき 飛びやすい。", mods: { knockResist: 2.1 } },
+  // ユゥナリナ:その場から相手を動かす担当。弱い力でも相手を強く飛ばし、
+  // 敵の「飛びづらい」系の能力(アルバ/ジーナ・マミ/マルガリティフェラ)も貫きやすい(無視はしない)
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "あてたとき 相手を よく飛ばす。",
+    mods: { knockPower: 1.9, pierceGuard: 0.45 } },
   // モコクン:軌道予測はこちらへ移動(通常=相手の飛ぶ方向、進化=自分の飛ぶ方向)
   { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "相手を 飛ばす 方向が 分かる。", mods: { trajectoryGuide: true } },
   { id: "mizu", name: "瑞珠", icon: "🐗", color: "#eee6cf", trait: "あたったとき 弾く。", mods: { restitution: 0.22 } },
@@ -899,9 +901,10 @@ const CHARACTERS = [
 // 合体進化(1段階のみ)。ランチャーに置いた石へ同じ石を重ねると、その石の効果が進化する。
 // ミナリ=小さくなる/ベルペット=大きくなる(ユーザー指定)。他は主効果を強化。throwPieceで適用。
 const EVOLVE_MODS = {
-  minari:    { pathCurveMult: 0.06 },             // さらに曲がらない(小型化は廃止)
-  aune:      { pathCurveMult: 1.8, radiusScale: 0.78 },  // さらに曲がって小さく(2.6→1.8、盤外飛び出し抑制)
-  yuunarina: { knockResist: 2.1, restitution: 0.22 },    // 飛びやすさ+弾く(レイズテイク向き)
+  minari:    { radiusScale: 0.7 },                // カーブは変えず小さくなるだけ
+  aune:      { radiusScale: 0.7 },                // カーブは変えず小さくなるだけ
+  // ユゥナリナ進化:自分が直接飛ばした石も、次に当たった相手を少し強く飛ばせるようになる
+  yuunarina: { knockPower: 2.2, passKnockPower: 1.35 },
   mayuu:     { scoreMult: 3 },                    // 得点3倍
   belpet:    { restitution: 0.22 },               // 飛びづらさ+当てた石を弾く(ガード向き)
   rako:      { selfStopVsAlly: 0.04 },            // 味方にあてるとぴたりと止まる
@@ -1099,16 +1102,17 @@ function renderHand() {
   bar.replaceChildren();
   game.hand.forEach((character, index) => {
     // 合体で消費したスロットは空(null)。ターン開始まで補充されないので、空の受け皿を描く。
-    if (!character) {
+    // 投げる位置にセット済みの石も、ソケットからは持ち出されているので受け皿は空にする。
+    if (!character || index === game.selectedHandIndex) {
       const empty = document.createElement("div");
-      empty.className = "handCard empty";
+      empty.className = "handCard empty" + (character ? " staged" : "");
       empty.dataset.index = String(index);
       bar.appendChild(empty);
       return;
     }
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "handCard" + (index === game.selectedHandIndex ? " selected" : "")
+    button.className = "handCard"
       + (index === game.refillHandIndex ? " entering" : "")
       + (game.carry && game.carry.index === index ? " carrying" : "");
     button.dataset.index = String(index);
@@ -1119,10 +1123,9 @@ function renderHand() {
     button.dataset.trajectoryGuide = String(character.mods.trajectoryGuide ?? false);
     button.dataset.scoreMult = String(character.mods.scoreMult ?? 1);
     button.dataset.partType = character.mods.partType ?? "none";
-    button.setAttribute("aria-pressed", index === game.selectedHandIndex ? "true" : "false");
-    const evolvedBadge = (index === game.selectedHandIndex && game.stagedEvolved) ? `<span class="evolvedBadge">★</span>` : "";
+    button.setAttribute("aria-pressed", "false");
     // ボール(石)の見た目:アイコンのみ。名前・特性はここには出さず、置いたとき画面中央に出す。
-    button.innerHTML = `<span class="icon">${character.icon}</span>${evolvedBadge}`;
+    button.innerHTML = `<span class="icon">${character.icon}</span>`;
     button.setAttribute("aria-label", `${character.name}（${character.trait}）`);
     button.style.setProperty("--ball-color", character.color);
     // 掴んで運ぶ:pointerdownで運搬開始、pointerupで「置く/合体」を判定(タップでも同ロジックで動く)
@@ -1211,6 +1214,10 @@ function createPiece(x, y, role, character = null) {
       pathCurveMult: 1,
       curveSpeedEase: 1,      // 1未満だと速度による曲がり抑制が弱まる(速い球でも曲がる。アウネ)
       knockResist: 1,
+      knockPower: 1,          // あてた相手を飛ばす力の倍率(ユゥナリナ)
+      passKnockPower: 1,      // 自分が飛ばした石が、さらに当てた相手を飛ばす力(ユゥナリナ進化)
+      pierceGuard: 0,         // 敵の「飛びづらい」能力をどれだけ貫くか(0=貫かない、1=無視)
+      weakToBlast: 1,         // ウーヨンの爆風で受ける力の倍率(ベルペットは大きい)
       selfStopMult: 1,
       selfStopVsAlly: 1,      // 味方に当てたとき自分が止まりやすい(ラコ)
       selfStopVsEnemy: 1,     // 敵に当てたとき自分が止まりやすい(ぱふ)
@@ -1359,16 +1366,19 @@ function applyEnemyContactAbilities(a, b) {
         other.mods.radiusScale = Math.max(0.52, other.mods.radiusScale * 0.68);
         other.mods.allyKnockMult *= 0.45;
         other.mods.enemyKnockMult *= 0.45;
-        other.mods.knockResist *= 1.35;
+        other.mods.knockPower *= 0.45;
+        // 小さくされた石は軽くなり、あてられたとき大きく飛ばされるようになる
+        other.mods.knockResist = Math.max(other.mods.knockResist * 1.9, 1.6);
         addImpactFx(other.x, other.y, 2.2, false);
         playUiPopSound(310, 0.04);
       });
     }
-    if (enemy.enemyId === "gluttony" && other.role === "enemy" && other.uid !== enemy.uid && !other.enlargedByDellorath) {
+    // デロルスは相手を選ばない。敵もなかまも大きく重くして、飛ばしにくくする。
+    if (enemy.enemyId === "gluttony" && other.uid !== enemy.uid && !other.enlargedByDellorath) {
       activateOnce(`dellorath:${enemy.uid}`, () => {
         other.enlargedByDellorath = true;
         other.mods.radiusScale = Math.min(1.7, other.mods.radiusScale * 1.35);
-        other.mods.knockResist = Math.max(0.32, other.mods.knockResist * 0.5);
+        other.mods.knockResist = Math.min(other.mods.knockResist * 0.5, 0.45);
         flashEnemyAbility(enemy);
         flashEnemyAbility(other);
         playEnemyPopSound();
@@ -1387,7 +1397,10 @@ function applyEnemyPostMoveAbilities() {
         const dx = target.x - enemy.x, dy = target.y - enemy.y;
         const distance = Math.hypot(dx, dy);
         if (distance <= 0 || distance > CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) continue;
-        const speed = CONFIG.WUYONG_BLAST_SPEED * (1 - distance / (CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) * 0.45);
+        // 爆風は「あたったとき飛びづらい」耐性(knockResist)を無視する。
+        // ベルペットは weakToBlast が大きく、耐性持ちなのにウーヨンの爆風では大きく弾かれる。
+        const speed = CONFIG.WUYONG_BLAST_SPEED * (1 - distance / (CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) * 0.45)
+          * (target.mods?.weakToBlast ?? 1);
         target.vx += dx / distance * speed;
         target.vy += dy / distance * speed;
         moved = true;
@@ -1809,6 +1822,7 @@ function throwPiece(params) {
     oldPiece.lastTakeRoute = null;
     oldPiece.lastHitIgnoredAbilities = false;
     oldPiece.inheritsIgnoreAbilities = false;
+    oldPiece.inheritedKnockPower = 1;
   }
   const p = createPiece(launch.x, launch.y, "player", character);
   p.isCurrentShot = true;
@@ -2074,6 +2088,16 @@ function startEnemyAdvance() {
     spawnEnemyWave();
     showScoreEvent("ぶらんくっ！");
     enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
+    // ブランクで盤がなかまだらけのまま次の波に入ると場所が足りず作業ゲーになるため、
+    // 新しく出てきた敵と同じ数だけ、外側にいる(=役に立ちにくい)なかまを退場させる。
+    const retire = game.pieces
+      .filter(p => p.role === "player" && p.state === "onboard")
+      .sort((a, b) => Math.hypot(b.x, b.y) - Math.hypot(a.x, a.y))
+      .slice(0, enemies.length);
+    for (const piece of retire) {
+      piece.state = "exiting";
+      piece.fallT = 0;
+    }
   }
   const scarcityBoost = 1 + clamp((ENEMIES.length - enemies.length) / (ENEMIES.length - 1), 0, 1) * 0.8;
   const baseSpeed = CONFIG.ENEMY_ADVANCE_DISTANCE * scarcityBoost / CONFIG.STOP_DIST_PER_SPEED;
@@ -2401,6 +2425,8 @@ function physicsStep() {
           if (T.role === "player" && (S.mods.raiseIgnoresEnemyAbilities || (S.inheritsIgnoreAbilities && S.mods.raiseIgnoresEnemyAbilities))) {
             T.inheritsIgnoreAbilities = true;
           }
+          // ユゥナリナ進化:自分が直接飛ばした石にも「相手を強く飛ばす力」を一部引き継がせる
+          if ((S.mods.passKnockPower ?? 1) > 1) T.inheritedKnockPower = S.mods.passKnockPower;
           if (T.role === "enemy" && game.phase === "playerMoving") {
             T.lastHitIgnoredAbilities = bypassEnemyAbility;
             if (S.isCurrentShot) {
@@ -2435,15 +2461,22 @@ function physicsStep() {
             tSpeed *= lowSpeedDamping;
             const targetRelationMult = T.role === "enemy" ? S.mods.enemyKnockMult : S.mods.allyKnockMult;
             tSpeed *= targetRelationMult;
+            // ユゥナリナ:あてた相手をよく飛ばす。自分が飛ばされて当たった石にも一部引き継ぐ(進化)
+            tSpeed *= S.mods.knockPower * (S.inheritedKnockPower ?? 1);
             const targetAbilitySuppressed = enemyAbilitySuppressed(T);
+            // 敵の「飛びづらい」系の能力は、pierceGuardの分だけ効き目を弱める(無視はしない)。
+            // 例:pierceGuard=0.45 なら 0.08倍の防御が 0.08→0.49倍まで緩む
+            const pierce = clamp(S.mods.pierceGuard ?? 0, 0, 1);
+            const softenGuard = (mult) => mult + (1 - mult) * pierce;
             if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "pride" && S.isCurrentShot) {
-              tSpeed *= 0.08;
+              tSpeed *= softenGuard(0.08);
               flashEnemyAbility(T);
             }
             // マルガリティフェラ:スピードの逆作用。速い球ほど飛ばされにくく、遅い球ほど動く。
             if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "lust") {
               const fast = clamp(impact / 26, 0, 1); // 0=遅い 〜 1=速い
-              tSpeed *= 1.5 - 1.25 * fast;          // 遅い:1.5倍 〜 速い:0.25倍
+              const guard = 1.5 - 1.25 * fast;      // 遅い:1.5倍 〜 速い:0.25倍
+              tSpeed *= guard < 1 ? softenGuard(guard) : guard;
               if (fast > 0.45) flashEnemyAbility(T);
             }
             // ジーナ=敵に、マミ=味方に「あてられたとき」だけ飛びづらい。
@@ -2452,7 +2485,7 @@ function physicsStep() {
               const resistRole = T.ginaForm === "mami" ? "player" : "enemy";
               const targetSpeedBefore = strikerIsA ? speedB : speedA;
               if (S.role === resistRole && targetSpeedBefore < 1.5) {
-                tSpeed *= 0.25;
+                tSpeed *= softenGuard(0.25);
                 flashEnemyAbility(T);
               }
             }
