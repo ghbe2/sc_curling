@@ -898,9 +898,9 @@ const CHARACTERS = [
   // 「操作できずに止まる」との報告があったため抑制。速いショットで曲がる特徴(curveSpeedEase)は維持
   { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "カーブ しやすい。", mods: { pathCurveMult: 1.25, curveSpeedEase: 0.55 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの 敵を 引き寄せる。", mods: { enemyAttractor: true } },
-  // ぱふ:敵専門。敵はよく飛ばして自分は止まるが、なかまはほとんど動かせない
-  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵は よく飛ばして 止まる。なかまは 飛ばせない。",
-    mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
+  // ぱふ:ラコの裏返し。ラコは「なかまに」、ぱふは「敵に」あてたときその場に止まる
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に あてたとき 止まりやすい。",
+    mods: { selfStopVsEnemy: 0.15 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スコアが 2倍 もらえる。", mods: { scoreMult: 2 } },
   // ユゥナリナ:その場から相手を動かす担当。弱い力でも相手を強く飛ばし、
   // 敵の「飛びづらい」系の能力(アルバ/ジーナ・マミ/マルガリティフェラ)も貫きやすい(無視はしない)
@@ -1044,7 +1044,7 @@ const EVOLVE_TRAIT_TEXT = {
   riu: "もう少し広く 敵の 能力を 封印。",
   aune: "小さくなる。カーブは そのまま。",
   hiroibeo: "もう少し広く 敵を 引き寄せる。",
-  pafu: "敵に あてたとき ぴたりと止まる。なかまは 飛ばせない。",
+  pafu: "敵に あてたとき ぴたりと止まる。",
   mayuu: "スコアが 3倍 もらえる。",
   yuunarina: "もっと よく飛ばす。飛ばした なかまも よく飛ばす。",
   mokokun: "自分を 飛ばす 方向が 分かる。",
