@@ -954,7 +954,8 @@ const EVOLVE_MODS = {
   minari:    { radiusScale: 0.7 },                // カーブは変えず小さくなるだけ
   aune:      { radiusScale: 0.7 },                // カーブは変えず小さくなるだけ
   // ユゥナリナ進化:自分が直接飛ばした石も、次に当たった相手を少し強く飛ばせるようになる
-  yuunarina: { knockPower: 2.2, passKnockPower: 1.35 },
+  // 飛ばす力そのものは変えない。飛ばしたキャラが同じ力で飛ばせるようになるだけ
+  yuunarina: { passKnockPower: true },
   mayuu:     { scoreMult: 3 },                    // 得点3倍
   belpet:    { restitution: 0.22 },               // 飛びづらさ+当てた石を弾く(ガード向き)
   rako:      { selfStopVsAlly: 0.04 },            // 味方にあてるとぴたりと止まる
@@ -1083,7 +1084,7 @@ const EVOLVE_TRAIT_TEXT = {
   hiroibeo: "もう少し広く 敵を 引き寄せる。",
   pafu: "敵に あてたとき ぴたりと止まる。",
   mayuu: "スコアが 3倍 もらえる。",
-  yuunarina: "もっと よく飛ばす。飛ばした なかまも よく飛ばす。",
+  yuunarina: "飛ばした キャラも、同じように 相手を よく飛ばす。",
   mokokun: "自分を 飛ばす 方向が 分かる。",
   mizu: "あたったとき もっと 弾く。",
 };
@@ -1265,7 +1266,7 @@ function createPiece(x, y, role, character = null) {
       curveSpeedEase: 1,      // 1未満だと速度による曲がり抑制が弱まる(速い球でも曲がる。アウネ)
       knockResist: 1,
       knockPower: 1,          // あてた相手を飛ばす力の倍率(ユゥナリナ)
-      passKnockPower: 1,      // 自分が飛ばした石が、さらに当てた相手を飛ばす力(ユゥナリナ進化)
+      passKnockPower: false,  // trueなら、自分が飛ばしたキャラへ「飛ばす力」をそのまま渡す(ユゥナリナ進化)
       pierceGuard: 0,         // 敵の「飛びづらい」能力をどれだけ貫くか(0=貫かない、1=無視)
       selfStopMult: 1,
       selfStopVsAlly: 1,      // 味方に当てたとき自分が止まりやすい(ラコ)
@@ -2489,7 +2490,9 @@ function physicsStep() {
             T.inheritsIgnoreAbilities = true;
           }
           // ユゥナリナ進化:自分が直接飛ばした石にも「相手を強く飛ばす力」を一部引き継がせる
-          if ((S.mods.passKnockPower ?? 1) > 1) T.inheritedKnockPower = S.mods.passKnockPower;
+          // 相手がなかまでも敵でも、飛ばした先へ「飛ばす力」をそのまま引き継がせる。
+          // 渡された側は passKnockPower を持たないので、そこから先へは伝わらない(1回だけ)。
+          if (S.mods.passKnockPower) T.inheritedKnockPower = S.mods.knockPower * (S.inheritedKnockPower ?? 1);
           if (T.role === "enemy" && game.phase === "playerMoving") {
             T.lastHitIgnoredAbilities = bypassEnemyAbility;
             if (S.isCurrentShot) {
