@@ -33,27 +33,46 @@
   }
   #hud .label { opacity: 0.6; font-size: 10px; margin-right: 2px; }
   /* 4つのボタンを2段2列で、すべて同じ大きさに揃える */
+  /* 右上の4ボタン。左上のスコア表示と取り合いになるので、必要な幅だけに絞る */
   #scenarioBar {
     position: fixed; top: 6px; right: 6px; z-index: 4;
-    display: grid; grid-template-columns: repeat(2, 84px); gap: 4px;
+    display: grid; grid-template-columns: repeat(2, 68px); gap: 4px;
   }
   #scenarioBar .btn {
-    height: 30px; padding: 0 4px; box-sizing: border-box;
+    height: 25px; padding: 0 3px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
-    white-space: nowrap;
+    font-size: 9px; white-space: nowrap;
   }
-  #soundToggleBtn.off { color: #9a8791; border-color: #d8c3cd; background: rgba(255,255,255,0.8); }
+  /* ボタンは「白地＋枠線」をやめ、桃色の塗り＋下側の影で、押せるアメ玉のように見せる。
+     ソケット(#handBar)とチュートリアル(#throwTutorial / #tutorialToggle / #swapUiBtn)は
+     それぞれ自前の見た目を持っているので、ここの変更の影響を受けない。 */
   .btn {
-    background: rgba(255,255,255,0.96); color: #e91e63;
-    border: 2px solid #f48fb1; border-radius: 10px;
-    padding: 5px 8px; font-size: 10px;
+    background: linear-gradient(180deg, #ff92b8 0%, #ec548b 100%);
+    color: #fff;
+    border: 0; border-radius: 999px;
+    padding: 6px 10px; font-size: 10px; font-weight: 700;
     font-family: 'DotGothic16', system-ui, sans-serif; /* inheritだとボタン既定フォントになるため明示する */
-    pointer-events: auto;
+    text-shadow: 0 1px 0 rgba(150,28,72,0.38);
+    box-shadow: 0 2px 0 #c33a66, 0 3px 9px rgba(120,30,60,0.24);
+    pointer-events: auto; cursor: pointer;
+    transition: transform 0.06s, box-shadow 0.06s, filter 0.12s;
   }
-  .btn.active { background: #52526a; border-color: #7878a0; }
-  .btn:active { background: #46465a; }
-  #resetBtn { background: rgba(255,255,255,0.96); border-color: #f48fb1; }
-  #resetBtn:active { background: #5c4646; }
+  /* 押している間は影のぶんだけ沈む */
+  .btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 #c33a66, 0 1px 4px rgba(120,30,60,0.2);
+  }
+  /* ONになっている状態(デバッグなど)は水色に切り替える */
+  .btn.active {
+    background: linear-gradient(180deg, #8fe0f6 0%, #3fb8dd 100%);
+    color: #10333f; text-shadow: 0 1px 0 rgba(255,255,255,0.45);
+    box-shadow: 0 2px 0 #2b93b3, 0 3px 9px rgba(20,80,110,0.26);
+  }
+  #soundToggleBtn.off {
+    background: linear-gradient(180deg, #ded2d8 0%, #b8a5af 100%);
+    color: #fff; text-shadow: 0 1px 0 rgba(110,90,100,0.4);
+    box-shadow: 0 2px 0 #9b8891, 0 3px 9px rgba(90,70,80,0.2);
+  }
   #handBar {
     position: fixed; right: 7px; top: calc(100% - 320px); bottom: auto;
     transform: none;
@@ -214,17 +233,22 @@
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
   #sideInfo {
     position: fixed; left: 8px; top: 8px; z-index: 5;
+    /* 右上のボタン(68px×2＋隙間＋余白=152px)に食い込まない幅までに抑える */
+    max-width: calc(100vw - 168px);
     transition: opacity 0.12s, transform 0.12s;
   }
   #sideInfo.hidden { opacity: 0; pointer-events: none; transform: translateX(-12px); }
   #scorePanel {
     color: #4a2133;
-    font: 700 15px/1.2 'DotGothic16', system-ui, sans-serif;
+    font: 700 14px/1.2 'DotGothic16', system-ui, sans-serif;
     pointer-events: none;
-    display: flex; flex-direction: column; gap: 3px;
+    display: flex; flex-direction: column; gap: 2px;
     background: rgba(255,255,255,0.45); border-radius: 12px;
-    padding: 7px 12px 8px; box-shadow: 0 2px 10px rgba(80,30,50,0.10);
+    padding: 6px 10px 7px; box-shadow: 0 2px 10px rgba(80,30,50,0.10);
   }
+  /* 称号は長いものだと10文字を超えるので、「ランク」の見出しは付けずに1行で見せる */
+  #scoreRankRow { justify-content: flex-start !important; }
+  #rankText { font-size: 12px; white-space: nowrap; }
   /* 見出しと数値を左右に振り分け、数値は右揃えで桁が増えても位置が動かない */
   #scorePanel > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   body.ui-swapped #allOutBtn { right: auto; left: 7px; }
@@ -257,12 +281,16 @@
     /* B対応:早送りボタンを目立たせる。位置を上へ(盤とランチャーの間の余白)、サイズを大きく */
     position: fixed; left: 50%; right: auto; top: 60%; bottom: auto; z-index: 3;
     transform: translateX(-50%); width: 150px; height: 60px; padding: 6px 3px;
-    color: #e91e63; background: rgba(255,255,255,0.97);
-    border-color: #f48fb1; font-size: 17px; font-weight: 800;
-    box-shadow: 0 4px 14px rgba(233,30,99,0.28);
+    border-radius: 18px; font-size: 17px; font-weight: 800;
+    box-shadow: 0 4px 0 #c33a66, 0 6px 16px rgba(120,30,60,0.28);
     touch-action: none;
   }
-  #fastForwardBtn.holding { color: #1c2730; background: #87dcf5; border-color: #c4f2ff; }
+  #fastForwardBtn:active { transform: translateX(-50%) translateY(3px); box-shadow: 0 1px 0 #c33a66, 0 2px 8px rgba(120,30,60,0.22); }
+  #fastForwardBtn.holding {
+    background: linear-gradient(180deg, #a6ecff 0%, #4ec6ea 100%);
+    color: #10333f; text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+    box-shadow: 0 4px 0 #2b93b3, 0 6px 16px rgba(20,80,110,0.28);
+  }
   #fastForwardBtn.hidden { opacity: 0; pointer-events: none; }
   #throwTutorial {
     position: fixed; left: 7px; top: calc(100% - 320px); bottom: auto; z-index: 2;
@@ -509,7 +537,7 @@
 <div id="handBar" aria-label="なかまの手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
-    <span id="scoreRankRow"><span class="label">ランク</span><span id="rankText">🌱 ルーキー</span></span>
+    <span id="scoreRankRow"><span id="rankText">🌱 ぴよぴよタイム</span></span>
     <span id="scoreTurnRow"><span class="label">ターン</span><span id="turnTextVisible">1</span></span>
     <span id="scoreTotalRow">SCORE<span class="scoreValue" id="totalScoreText">0</span></span>
   </div>
