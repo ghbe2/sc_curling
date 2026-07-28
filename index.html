@@ -888,9 +888,9 @@ const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
 //  対象の表記なし = 敵味方問わず、「敵に」「味方に」= その対象に限定
 const CHARACTERS = [
   { id: "minari", name: "ミナリ", icon: "🐭", color: "#c9d7e8", trait: "カーブ しづらい。", mods: { pathCurveMult: 0.15 } },
-  // ベルペット:その場から動きづらいガード役。ただしウーヨンの爆風だけは効いて弾かれる
-  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。ウーヨンには 弱い。",
-    mods: { knockResist: 0.22, weakToBlast: 1.8 } },
+  // ベルペット:その場から動きづらいガード役
+  { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。",
+    mods: { knockResist: 0.22 } },
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "なかまに あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
   { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてたとき 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
@@ -1038,7 +1038,7 @@ function splitStagedStone() {
 // 合体後の能力テキスト(進化の内容を簡潔に示す)
 const EVOLVE_TRAIT_TEXT = {
   minari: "小さくなる。カーブは そのまま。",
-  belpet: "あたったとき 飛びづらいし 弾く。ウーヨンには 弱い。",
+  belpet: "あたったとき 飛びづらいし 弾く。",
   rako: "なかまに あてたとき ぴたりと止まる。",
   barni: "飛ばしたときも 能力を 無視。",
   riu: "もう少し広く 敵の 能力を 封印。",
@@ -1230,7 +1230,6 @@ function createPiece(x, y, role, character = null) {
       knockPower: 1,          // あてた相手を飛ばす力の倍率(ユゥナリナ)
       passKnockPower: 1,      // 自分が飛ばした石が、さらに当てた相手を飛ばす力(ユゥナリナ進化)
       pierceGuard: 0,         // 敵の「飛びづらい」能力をどれだけ貫くか(0=貫かない、1=無視)
-      weakToBlast: 1,         // ウーヨンの爆風で受ける力の倍率(ベルペットは大きい)
       selfStopMult: 1,
       selfStopVsAlly: 1,      // 味方に当てたとき自分が止まりやすい(ラコ)
       selfStopVsEnemy: 1,     // 敵に当てたとき自分が止まりやすい(ぱふ)
@@ -1410,10 +1409,8 @@ function applyEnemyPostMoveAbilities() {
         const dx = target.x - enemy.x, dy = target.y - enemy.y;
         const distance = Math.hypot(dx, dy);
         if (distance <= 0 || distance > CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) continue;
-        // 爆風は「あたったとき飛びづらい」耐性(knockResist)を無視する。
-        // ベルペットは weakToBlast が大きく、耐性持ちなのにウーヨンの爆風では大きく弾かれる。
-        const speed = CONFIG.WUYONG_BLAST_SPEED * (1 - distance / (CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) * 0.45)
-          * (target.mods?.weakToBlast ?? 1);
+        // 爆風は「あたったとき飛びづらい」耐性(knockResist)を見ず、全員を同じだけ押しのける
+        const speed = CONFIG.WUYONG_BLAST_SPEED * (1 - distance / (CONFIG.WUYONG_BLAST_RADIUS + pieceRadius(target)) * 0.45);
         target.vx += dx / distance * speed;
         target.vy += dy / distance * speed;
         moved = true;
@@ -2486,9 +2483,11 @@ function physicsStep() {
               flashEnemyAbility(T);
             }
             // マルガリティフェラ:スピードの逆作用。速い球ほど飛ばされにくく、遅い球ほど動く。
+            // デロルスに重くされると「速い球は効かない・遅い球も重くて動かない」の二重の壁で
+            // 手も足も出なくなるため、遅いときの倍率を大きく取り、重さを押し返せるようにする。
             if (!bypassEnemyAbility && !targetAbilitySuppressed && T.enemyId === "lust") {
               const fast = clamp(impact / 26, 0, 1); // 0=遅い 〜 1=速い
-              const guard = 1.5 - 1.25 * fast;      // 遅い:1.5倍 〜 速い:0.25倍
+              const guard = 4.0 - 3.75 * fast;      // 遅い:4倍 〜 速い:0.25倍
               tSpeed *= guard < 1 ? softenGuard(guard) : guard;
               if (fast > 0.45) flashEnemyAbility(T);
             }
