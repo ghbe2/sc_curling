@@ -369,8 +369,14 @@
     background: #fff0f5; color: #e91e63;
     font: 10px 'DotGothic16', sans-serif; cursor: pointer;
   }
-  .howToPage { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 8px; }
-  .howToPage.active { display: grid; }
+  /* 3ページを同じマス目に重ねて置く。パネルの高さが一番高いページに揃い、
+     ページを送っても枠のサイズが変わらない。 */
+  #howToPages { display: grid; }
+  .howToPage {
+    grid-area: 1 / 1; display: grid; visibility: hidden;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 8px;
+  }
+  .howToPage.active { visibility: visible; }
   .howToCard { overflow: hidden; border: 1px solid #f5b0c8; border-radius: 13px; background: white; box-shadow: 0 3px 10px rgba(80,30,50,0.08); }
   .howToShot { width: 100%; height: 92px; background: #fce4ec; }
   .howToCopy { padding: 8px 9px 10px; font-size: 11px; line-height: 1.55; }
@@ -495,7 +501,7 @@
 </div>
 <!-- デバッグ用。最終的には削除する -->
 <button class="btn" id="allOutBtn" aria-pressed="false">デバッグ OFF</button>
-<div id="handBar" aria-label="キャラストーン手札"></div>
+<div id="handBar" aria-label="なかまの手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
     <span id="scoreRankRow"><span class="label">ランク</span><span id="rankText">🌱 ルーキー</span></span>
@@ -530,21 +536,23 @@
 <div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
   <div id="howToPanel">
     <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose" aria-label="遊び方を閉じる">×</button></div>
-    <p class="howToLead">大罪をはじいて、まんなかの💖を守ろう！</p>
+    <p class="howToLead">まんなかの💝に近づけるな！</p>
+    <div id="howToPages">
     <div class="howToPage active" data-page="0">
-      <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① 💖を守ろう</b>すこしずつハートへ迫る大罪を、ハウスの外へはじき出そう。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="pinch"></canvas><div class="howToCopy"><b>② 重なったらピンチ！</b>敵が💖に重なったら、そのターンで弾けないとゲームオーバー。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>③ 侵入に注意</b>敵がハウスに入ると、外からさらに敵が増えるよ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① 💝を守ろう</b>すこしずつハートへ迫る敵を、ハウスの外へはじき出そう。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="pinch"></canvas><div class="howToCopy"><b>② 重なったらピンチ！</b>敵が💝に重なったら、そのターンで弾けないとゲームオーバー。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>③ 侵入に注意</b>敵がハウスの中央に迫ると、外から新しい敵がやって来るよ。</div></article>
     </div>
     <div class="howToPage" data-page="1">
       <article class="howToCard"><canvas class="howToShot" data-scene="throw"></canvas><div class="howToCopy"><b>④ えらんで、ねらって、おしだす</b>強く押せばはやく、やさしく押せばおそく進むよ。</div></article>
       <article class="howToCard"><canvas class="howToShot" data-scene="spin"></canvas><div class="howToCopy"><b>⑤ 回転でまげる</b>回転をかけた方向へ曲がるよ。強い回転ほど曲がりづらくなる。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="score"></canvas><div class="howToCopy"><b>⑥ 高得点をねらおう</b>敵をはじいたり、ハウスに味方の石を残すとスコアアップ。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="score"></canvas><div class="howToCopy"><b>⑥ 高得点をねらおう</b>敵をはじいたり、ハウスになかまを残すとスコアアップ。</div></article>
     </div>
     <div class="howToPage" data-page="2">
-      <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑦ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ 石には特徴がある</b>カーブのしやすさ、あたったときの飛びやすさ、止まりやすさなど。同じ石を重ねると合体して強くなるよ。<button type="button" class="howToBookLink">キャラクターを見る</button></div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>石をタップすると能力が見られるよ。動きをよく見よう。<button type="button" class="howToBookLink">キャラクターを見る</button></div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="blank"></canvas><div class="howToCopy"><b>⑦ ぜんぶはじけばブランク！</b>敵を全員はじき出すと、大きなボーナスがもらえるよ。けど……。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="stones"></canvas><div class="howToCopy"><b>⑧ なかまには特徴がある</b>ミナリはカーブしづらく、アウネはよく曲がる。マユゥはスコアが2倍。同じなかまを重ねると合体して強くなるよ。<button type="button" class="howToBookLink">キャラクターを見る</button></div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="enemies"></canvas><div class="howToCopy"><b>⑨ 敵にも特徴がある</b>キャラをタップすると能力が見られるよ。動きをよく見よう。<button type="button" class="howToBookLink">キャラクターを見る</button></div></article>
+    </div>
     </div>
     <div class="howToPager"><button class="btn" id="howToPrev">まえ</button><span id="howToPageLabel">● ○ ○</span><button class="btn" id="howToNext">つぎ</button></div>
   </div>
@@ -849,9 +857,9 @@ const game = {
 const ENEMIES = [
   { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "なかまに あたったとき 分身を 生む。" },
   { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "なかまに あたったとき 小さく 飛びやすく する。" },
-  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い石が あたったとき 飛びづらい。" },
+  { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い あいてが あたったとき 飛びづらい。" },
   { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "速く 近づき まわりを 弾く。" },
-  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "じかに あてても 飛びにくい。飛ばした石なら 飛ぶ。" },
+  { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "じかに あてても 飛びにくい。飛ばした キャラなら 飛ぶ。" },
   { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "毎ターン 姿が 変わる。ジーナは 敵に、マミは なかまに 飛ばされにくい。" },
   { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "あたった あいてを 大きく 飛びにくく する。" },
 ];
@@ -860,14 +868,14 @@ const ENEMIES = [
 // 上にあるものほど優先(1投につき最上位の1件だけが成立する)。
 const TRICKS = [
   { id: "takeout",    label: "ていくあうとっ！",     name: "テイクアウト",       score: 50,   desc: "敵を ハウスの外へ 出す。" },
-  { id: "raise",      label: "れいずていくっ！",     name: "レイズテイク",       score: 200,  desc: "味方の石を 当てて 間接的に テイク。" },
+  { id: "raise",      label: "れいずていくっ！",     name: "レイズテイク",       score: 200,  desc: "なかまを 当てて 間接的に テイク。" },
   { id: "double",     label: "だぶるていくっ!!",     name: "ダブルテイク",       score: 300,  desc: "1回で 敵を 2体 ハウスの外へ。" },
   { id: "triple",     label: "とりぷるていくっ!!!",  name: "トリプルテイク",     score: 800,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
-  { id: "inPlay",     label: "いんぷれい！",         name: "インプレイ",         score: 100,  desc: "自分の石が ハウスに 残る。" },
+  { id: "inPlay",     label: "いんぷれい！",         name: "インプレイ",         score: 100,  desc: "自分の キャラが ハウスに 残る。" },
   { id: "tee",        label: "てぃーしょっとっ！",   name: "ティーショット",     score: 300,  desc: "何にも 当てずに ボタンの上に 止める。" },
   { id: "comeAround", label: "かむ・あらうんどっ！", name: "カム・アラウンド",   score: 600,  desc: "ガードを よけて ボタンの上に 止める。" },
-  { id: "freeze",     label: "ふりーずっ！",         name: "フリーズショット",   score: 250,  desc: "敵の石の すぐ手前に ぴたりと 止める。" },
-  { id: "port",       label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500, desc: "石と石の すきまを 当たらずに 通す。" },
+  { id: "freeze",     label: "ふりーずっ！",         name: "フリーズショット",   score: 250,  desc: "敵の すぐ手前に ぴたりと 止める。" },
+  { id: "port",       label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500, desc: "キャラの すきまを 当たらずに 通す。" },
   { id: "through",    label: "するー…",             name: "スルー",             score: -120, desc: "何にも 当たらず ハウスも 素通り。(減点)" },
 ];
 const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
@@ -1594,7 +1602,7 @@ function updateThrowTutorial() {
     if (selectInstruction) selectInstruction.textContent = "合体ずみ ★";
     if (selectSub) selectSub.textContent = "パワーアップ！";
   } else {
-    if (selectInstruction) selectInstruction.textContent = "同じ石で合体";
+    if (selectInstruction) selectInstruction.textContent = "同じキャラで合体";
     if (selectSub) selectSub.textContent = "重ねてパワーアップ";
   }
 
@@ -3205,8 +3213,8 @@ function render() {
   const heartFloat = Math.sin(performance.now() / 430) * 3;
   ctx.fillStyle = "#e91e63";
   ctx.font = `${Math.max(16, hR / 8)}px 'Apple Color Emoji','Segoe UI Emoji',sans-serif`;
-  ctx.fillText("💖", 0, 1 + heartFloat);
-  // 目的テキスト「敵を弾いて💖を守れ！」はチュートリアルに移したので盤面には表示しない
+  ctx.fillText("💝", 0, 1 + heartFloat);
+  // 目的テキスト「敵を弾いて💝を守れ！」はチュートリアルに移したので盤面には表示しない
 
   // 格子ガイド:縦線がストーン中心に来るよう、間隔をストーン直径(PIECE_RADIUS×2)にする。
   // これで隣り合うストーンがそれぞれ縦線上に中心を合わせて並ぶ。盤の円でクリップして描画。
@@ -3759,15 +3767,15 @@ function drawHowToShots() {
 
     const scene = canvasEl.dataset.scene;
     if (scene === "heart") {
-      house(w * .5, h * .48, 33); label("💖", w * .5, h * .48, "#e91e63", 18);
+      house(w * .5, h * .48, 33); label("💝", w * .5, h * .48, "#e91e63", 18);
       stone(w * .18, h * .25, "🐻", true); stone(w * .8, h * .7, "🐊", true);
       arrow(w * .26, h * .29, w * .41, h * .42); arrow(w * .72, h * .66, w * .59, h * .54);
     } else if (scene === "pinch") {
-      house(w * .42, h * .5, 34); label("💖", w * .42, h * .5, "#e91e63", 18); stone(w * .42, h * .5, "🦁", true, 14);
+      house(w * .42, h * .5, 34); label("💝", w * .42, h * .5, "#e91e63", 18); stone(w * .42, h * .5, "🦁", true, 14);
       label("ピンチ！", w * .76, h * .3, "#c40030", 15); arrow(w * .68, h * .7, w * .52, h * .57, "#c40030");
       label("このターンで弾く", w * .75, h * .83, "#4a2133", 9);
     } else if (scene === "reinforce") {
-      house(w * .43, h * .5, 34); stone(w * .43, h * .34, "🦁", true); arrow(w * .83, h * .3, w * .64, h * .39); stone(w * .88, h * .24, "🦊", true); label("＋ なかま！", w * .76, h * .72);
+      house(w * .43, h * .5, 34); stone(w * .43, h * .34, "🦁", true); arrow(w * .83, h * .3, w * .64, h * .39); stone(w * .88, h * .24, "🦊", true); label("敵がふえる！", w * .74, h * .74, "#e91e63", 11);
     } else if (scene === "throw") {
       stone(w * .23, h * .25, "🐭"); stone(w * .23, h * .55, "🐮"); label("えらぶ", w * .23, h * .82, "#4a2133", 10);
       stone(w * .58, h * .68, "🐔", false, 14); arrow(w * .58, h * .6, w * .58, h * .18); label("ねらう → おす", w * .73, h * .88, "#e91e63", 10);
@@ -3780,8 +3788,8 @@ function drawHowToShots() {
     } else if (scene === "blank") {
       house(w * .5, h * .5, 34); label("ぶらんくっ！", w * .5, h * .5, "#e91e63", 15); label("BONUS", w * .5, h * .78, "#4a2133", 10);
     } else if (scene === "stones") {
-      stone(w * .22, h * .4, "🐍", false, 14); stone(w * .5, h * .4, "🐔", false, 14); stone(w * .78, h * .4, "🐶", false, 17);
-      label("カーブ", w * .22, h * .78, "#4a2133", 9); label("飛びやすい", w * .5, h * .78, "#4a2133", 9); label("大きい", w * .78, h * .78, "#4a2133", 9);
+      stone(w * .22, h * .4, "🐭", false, 14); stone(w * .5, h * .4, "🐍", false, 14); stone(w * .78, h * .4, "🐵", false, 14);
+      label("まがらない", w * .22, h * .78, "#4a2133", 9); label("よくまがる", w * .5, h * .78, "#4a2133", 9); label("スコア2倍", w * .78, h * .78, "#4a2133", 9);
     } else if (scene === "enemies") {
       stone(w * .22, h * .42, "🐻", true, 15); stone(w * .5, h * .42, "🦁", true, 15); stone(w * .78, h * .42, "🐊", true, 15); label("それぞれ違う動き", w * .5, h * .8, "#e91e63", 11);
     }
@@ -3862,8 +3870,8 @@ function buildCharacterBookPages() {
   if (!container) return [];
   // A対応:味方と敵で1ページずつ(計2ページ)に集約
   const groups = [
-    { label: "味方ストーン", items: CHARACTERS.slice(), enemy: false },
-    { label: "敵ストーン（七つの大罪）", items: ENEMIES.slice(), enemy: true },
+    { label: "味方", items: CHARACTERS.slice(), enemy: false },
+    { label: "敵", items: ENEMIES.slice(), enemy: true },
   ];
   container.replaceChildren();
   for (const [pageIndex, group] of groups.entries()) {
