@@ -137,14 +137,16 @@
   }
   #dangerAlert.show { opacity: 1; transform: translateX(-50%) scale(1); }
   #dangerAlert.house { color: #6b3b00; background: rgba(255,244,196,0.94); border: 2px solid #e3a72f; }
+  /* 他の吹き出し(トリック名・はやおくり)と同じ「白地+桃色の枠」のトンマナに合わせる。
+     危険であることは文字色(#c40030)と脈打つ動きだけで示す。 */
   #dangerAlert.pinch {
-    color: white; background: rgba(196,0,48,0.94); border: 3px solid white;
-    font-size: 24px; letter-spacing: 2px;
+    color: #c40030; background: rgba(255,255,255,0.97); border: 3px solid #f48fb1;
+    font-size: 20px; letter-spacing: 1px;
     animation: pinchPulse 0.6s ease-in-out infinite alternate;
-    box-shadow: 0 0 0 5px rgba(196,0,48,0.25), 0 0 30px rgba(196,0,48,0.7);
+    box-shadow: 0 4px 14px rgba(233,30,99,0.28);
   }
-  #dangerAlert .dangerSub { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0; }
-  @keyframes pinchPulse { from { transform: translateX(-50%) scale(0.96); } to { transform: translateX(-50%) scale(1.05); } }
+  #dangerAlert .dangerSub { display: block; margin-top: 3px; font-size: 10px; letter-spacing: 0; color: #4a2133; }
+  @keyframes pinchPulse { from { transform: translateX(-50%) scale(0.97); } to { transform: translateX(-50%) scale(1.03); } }
   /* 能力説明:枠なし。上端をチュートリアル/ソケットと揃え、その間の中央に出す。
      置いている石の能力は消えずに出続け、狙い始めるか敵タップで上書き/非表示になる。 */
   /* 能力説明は石の絵文字の上に出る吹き出し(キャラのグラフィック導入を想定したデザイン) */
@@ -889,14 +891,16 @@ const CHARACTERS = [
   // ベルペット:その場から動きづらいガード役。ただしウーヨンの爆風だけは効いて弾かれる
   { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。ウーヨンには 弱い。",
     mods: { knockResist: 0.22, weakToBlast: 1.8 } },
-  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "味方に あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
+  { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "なかまに あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
   { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてたとき 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
   // pathCurveMult 1.75→1.25:最大ベンド(弱いフリック)だと盤外まで曲がって出てしまい
   // 「操作できずに止まる」との報告があったため抑制。速いショットで曲がる特徴(curveSpeedEase)は維持
   { id: "aune", name: "アウネ", icon: "🐍", color: "#efb45f", trait: "カーブ しやすい。", mods: { pathCurveMult: 1.25, curveSpeedEase: 0.55 } },
   { id: "hiroibeo", name: "ヒロイベオ", icon: "🐴", color: "#a99a91", trait: "近くの 敵を 引き寄せる。", mods: { enemyAttractor: true } },
-  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵に あてたとき 止まりやすい。", mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
+  // ぱふ:敵専門。敵はよく飛ばして自分は止まるが、なかまはほとんど動かせない
+  { id: "pafu", name: "ぱふ", icon: "🐑", color: "#c9a77c", trait: "敵は よく飛ばして 止まる。なかまは 飛ばせない。",
+    mods: { allyKnockMult: 0.32, enemyKnockMult: 2.4, selfStopVsEnemy: 0.15 } },
   { id: "mayuu", name: "マユゥ", icon: "🐵", color: "#e8d7bd", trait: "スコアが 2倍 もらえる。", mods: { scoreMult: 2 } },
   // ユゥナリナ:その場から相手を動かす担当。弱い力でも相手を強く飛ばし、
   // 敵の「飛びづらい」系の能力(アルバ/ジーナ・マミ/マルガリティフェラ)も貫きやすい(無視はしない)
@@ -1033,16 +1037,16 @@ function splitStagedStone() {
 
 // 合体後の能力テキスト(進化の内容を簡潔に示す)
 const EVOLVE_TRAIT_TEXT = {
-  minari: "もっと カーブ しづらい。",
-  belpet: "あたったとき 飛びづらいし 弾く。",
-  rako: "味方に あてたとき ぴたりと止まる。",
+  minari: "小さくなる。カーブは そのまま。",
+  belpet: "あたったとき 飛びづらいし 弾く。ウーヨンには 弱い。",
+  rako: "なかまに あてたとき ぴたりと止まる。",
   barni: "飛ばしたときも 能力を 無視。",
   riu: "もう少し広く 敵の 能力を 封印。",
-  aune: "もっと カーブ しやすい。",
+  aune: "小さくなる。カーブは そのまま。",
   hiroibeo: "もう少し広く 敵を 引き寄せる。",
-  pafu: "敵に あてたとき ぴたりと止まる。",
+  pafu: "敵に あてたとき ぴたりと止まる。なかまは 飛ばせない。",
   mayuu: "スコアが 3倍 もらえる。",
-  yuunarina: "あたったとき 飛びやすいし 弾く。",
+  yuunarina: "もっと よく飛ばす。飛ばした なかまも よく飛ばす。",
   mokokun: "自分を 飛ばす 方向が 分かる。",
   mizu: "あたったとき もっと 弾く。",
 };
@@ -3576,10 +3580,10 @@ function updateDangerAlert() {
   // ボタンに乗って敗北が迫る PINCH! だけ表示する。
   if (game.turnAlertLevel === "pinch") {
     el.className = "show pinch";
-    el.textContent = "PINCH!";
+    el.textContent = "ぴんちっ！";
     const sub = document.createElement("span");
     sub.className = "dangerSub";
-    sub.textContent = "このショットでボタンから退けろ！";
+    sub.textContent = "このショットで 💝から どかそう！";
     el.appendChild(sub);
   }
 }
@@ -3785,7 +3789,7 @@ function drawHowToScene(canvasEl, time = 0) {
       arrow(w * .26, h * .29, w * .41, h * .42); arrow(w * .72, h * .66, w * .59, h * .54);
     } else if (scene === "pinch") {
       house(w * .42, h * .5, 34); label("💝", w * .42, h * .5, "#e91e63", 18); stone(w * .42, h * .5, "🦁", true, 14);
-      label("ピンチ！", w * .76, h * .3, "#c40030", 15); arrow(w * .68, h * .7, w * .52, h * .57, "#c40030");
+      label("ぴんちっ！", w * .76, h * .3, "#c40030", 14); arrow(w * .68, h * .7, w * .52, h * .57, "#c40030");
       label("このターンで弾く", w * .75, h * .83, "#4a2133", 9);
     } else if (scene === "reinforce") {
       house(w * .43, h * .5, 34); stone(w * .43, h * .34, "🦁", true); arrow(w * .83, h * .3, w * .64, h * .39); stone(w * .88, h * .24, "🦊", true); label("敵がふえる！", w * .74, h * .74, "#e91e63", 11);
