@@ -371,14 +371,15 @@
   }
   /* 3ページを同じマス目に重ねて置く。パネルの高さが一番高いページに揃い、
      ページを送っても枠のサイズが変わらない。 */
-  #howToPages { display: grid; }
+  /* 1列だけの入れ物。minmax(0,1fr)を明示しないと、中のページの1frが0幅に潰れる */
+  #howToPages { display: grid; grid-template-columns: minmax(0, 1fr); }
   .howToPage {
     grid-area: 1 / 1; display: grid; visibility: hidden;
     grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 10px 12px 8px;
   }
   .howToPage.active { visibility: visible; }
   .howToCard { overflow: hidden; border: 1px solid #f5b0c8; border-radius: 13px; background: white; box-shadow: 0 3px 10px rgba(80,30,50,0.08); }
-  .howToShot { width: 100%; height: 92px; background: #fce4ec; }
+  .howToShot { width: 100%; height: 100px; background: #fce4ec; display: block; }
   .howToCopy { padding: 8px 9px 10px; font-size: 11px; line-height: 1.55; }
   .howToCopy b { display: block; margin-bottom: 2px; color: #e91e63; font-size: 13px; }
   .howToPager { position: sticky; bottom: 0; z-index: 2; display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; gap: 8px; padding: 9px 12px 12px; background: rgba(255,248,251,0.97); border-top: 1px solid #f7bfd1; }
@@ -462,7 +463,7 @@
     html, body { --side-panel-width: 92px; }
     #throwTutorial { padding: 7px 6px; font-size: 9px; }
     .howToPage { grid-template-columns: 1fr; }
-    .howToShot { height: 76px; }
+    .howToShot { height: 84px; }
     .howToCopy { padding: 6px 8px 7px; font-size: 10px; line-height: 1.4; }
     .characterBookPage { height: min(70vh, 560px); grid-template-columns: repeat(3,minmax(0,1fr)); grid-auto-rows: minmax(0,1fr); gap: 5px; padding: 7px; }
     .characterCard { padding: 3px; }
@@ -3726,13 +3727,22 @@ function bindFastForwardButton() {
   button.addEventListener("lostpointercapture", stop);
 }
 
-function drawHowToShots() {
-  document.querySelectorAll(".howToShot").forEach((canvasEl) => {
+function drawHowToShots(time = 0) {
+  document.querySelectorAll(".howToShot").forEach((canvasEl) => drawHowToScene(canvasEl, time));
+}
+
+// 1枚ぶんの挿絵を描く。timeは秒。④⑤だけがtimeを見て動く(動画ファイルは使わない)。
+function drawHowToScene(canvasEl, time = 0) {
+  {
     const rect = canvasEl.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
     const dpr = window.devicePixelRatio || 1;
-    canvasEl.width = Math.round(rect.width * dpr);
-    canvasEl.height = Math.round(rect.height * dpr);
+    // 毎フレーム呼ばれるので、サイズが変わったときだけ作り直す
+    const pixelW = Math.round(rect.width * dpr), pixelH = Math.round(rect.height * dpr);
+    if (canvasEl.width !== pixelW || canvasEl.height !== pixelH) {
+      canvasEl.width = pixelW;
+      canvasEl.height = pixelH;
+    }
     const g = canvasEl.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const w = rect.width, h = rect.height;
@@ -3749,11 +3759,14 @@ function drawHowToShots() {
         g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fillStyle = color; g.fill();
       }
     };
-    const stone = (x, y, icon, enemy = false, r = 12) => {
+    const stone = (x, y, icon, enemy = false, r = 12, rot = 0) => {
       g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = enemy ? "#17131c" : "rgba(255,255,255,.9)"; g.fill();
       g.strokeStyle = enemy ? "#ff6e9e" : "#6a4a59"; g.lineWidth = 2; g.stroke();
       g.font = `${r * 1.25}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
-      g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#222"; g.fillText(icon, x, y + 1);
+      g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#222";
+      // 絵文字だけ回す(スピンの表現)。rot=0のときは従来どおり
+      if (rot) { g.save(); g.translate(x, y + 1); g.rotate(rot); g.fillText(icon, 0, 0); g.restore(); }
+      else g.fillText(icon, x, y + 1);
     };
     const arrow = (x1, y1, x2, y2, color = "#e91e63") => {
       const angle = Math.atan2(y2 - y1, x2 - x1);
@@ -3777,12 +3790,90 @@ function drawHowToShots() {
     } else if (scene === "reinforce") {
       house(w * .43, h * .5, 34); stone(w * .43, h * .34, "🦁", true); arrow(w * .83, h * .3, w * .64, h * .39); stone(w * .88, h * .24, "🦊", true); label("敵がふえる！", w * .74, h * .74, "#e91e63", 11);
     } else if (scene === "throw") {
-      stone(w * .23, h * .25, "🐭"); stone(w * .23, h * .55, "🐮"); label("えらぶ", w * .23, h * .82, "#4a2133", 10);
-      stone(w * .58, h * .68, "🐔", false, 14); arrow(w * .58, h * .6, w * .58, h * .18); label("ねらう → おす", w * .73, h * .88, "#e91e63", 10);
+      // ④ えらぶ→ねらう→おす、を1周3.4秒で繰り返す
+      const CYCLE = 3.4, t = time % CYCLE;
+      const lerp = (a, b, k) => a + (b - a) * k;
+      const easeOut = (k) => 1 - (1 - k) * (1 - k);
+      const spotX = w * .5, spotY = h * .70, R = 11;
+      const socketX = w * .14, socketY = h * .70;
+      // 置き場所の◯(ランチャー)
+      g.setLineDash([4, 3]); g.strokeStyle = "rgba(233,30,99,.5)"; g.lineWidth = 2;
+      g.beginPath(); g.arc(spotX, spotY, R + 2, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      stone(w * .29, socketY, "🐮", false, 8); // ソケットに残っているなかま
+
+      let sx = spotX, sy = spotY, fingerY = null, step = 0;
+      if (t < 1.0) {                       // えらぶ:ソケットから運ぶ
+        const k = easeOut(t / 1.0);
+        sx = lerp(socketX, spotX, k); sy = lerp(socketY, spotY, k);
+        fingerY = sy + R + 7; step = 0;
+      } else if (t < 1.9) {                // ねらう:指を下へ引く
+        const k = easeOut((t - 1.0) / 0.9);
+        fingerY = spotY + R + 7 + 13 * k; step = 1;
+        arrow(spotX + 26, spotY - 4, spotX + 26, spotY + 14);
+      } else if (t < 2.2) {                // おす:指をすばやく前へ
+        const k = (t - 1.9) / 0.3;
+        fingerY = lerp(spotY + R + 20, spotY + R + 2, k); step = 2;
+      } else {                             // 滑走:だんだん減速して進む
+        const k = easeOut((t - 2.2) / 1.2);
+        sy = lerp(spotY, h * .13, k); step = 2;
+        g.setLineDash([3, 4]); g.strokeStyle = "rgba(233,30,99,.45)"; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(spotX, spotY); g.lineTo(spotX, sy + R); g.stroke(); g.setLineDash([]);
+      }
+      stone(sx, sy, "🐭", false, R);
+      if (fingerY !== null) {
+        g.font = `13px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+        g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("👆", sx, fingerY);
+      }
+      // 下段に「えらぶ → ねらう → おす」を並べ、いまの段階だけ色を付ける
+      const steps = ["えらぶ", "ねらう", "おす"];
+      g.font = `700 9px 'DotGothic16', sans-serif`; g.textAlign = "left"; g.textBaseline = "middle";
+      const widths = steps.map(s => g.measureText(s).width);
+      const gapText = g.measureText(" → ").width;
+      let cursor = (w - (widths[0] + widths[1] + widths[2] + gapText * 2)) / 2;
+      steps.forEach((s, i) => {
+        g.fillStyle = i === step ? "#e91e63" : "rgba(74,33,51,.38)";
+        g.fillText(s, cursor, h * .93); cursor += widths[i];
+        if (i < 2) { g.fillStyle = "rgba(74,33,51,.3)"; g.fillText(" → ", cursor, h * .93); cursor += gapText; }
+      });
     } else if (scene === "spin") {
-      stone(w * .5, h * .72, "🐍", false, 14);
-      g.strokeStyle = "#e91e63"; g.lineWidth = 3; g.beginPath(); g.moveTo(w * .5, h * .64); g.bezierCurveTo(w * .48, h * .45, w * .68, h * .28, w * .78, h * .17); g.stroke();
-      arrow(w * .36, h * .74, w * .26, h * .62); arrow(w * .64, h * .74, w * .74, h * .62); label("回転した方へ", w * .5, h * .15, "#4a2133", 10);
+      // ⑤ 回転をかけた方向へ曲がる。1周ごとに右回り・左回りを入れ替える
+      const CYCLE = 3.4, t = time % CYCLE;
+      const dir = Math.floor(time / CYCLE) % 2 === 0 ? 1 : -1;
+      const easeOut = (k) => 1 - (1 - k) * (1 - k);
+      const x0 = w * .5, y0 = h * .78;
+      const cx = w * (.5 + dir * .02), cy = h * .40;
+      const x1 = w * (.5 + dir * .30), y1 = h * .16;
+      const at = (k) => {
+        const m = 1 - k;
+        return [m * m * x0 + 2 * m * k * cx + k * k * x1, m * m * y0 + 2 * m * k * cy + k * k * y1];
+      };
+      const SPIN = 0.7, GLIDE = 2.0; // 溜め / 滑走
+      const progress = t < SPIN ? 0 : easeOut(Math.min((t - SPIN) / GLIDE, 1));
+      const [sx, sy] = at(progress);
+      // 通ってきた軌跡
+      if (progress > 0) {
+        g.strokeStyle = "rgba(233,30,99,.5)"; g.lineWidth = 3; g.lineCap = "round";
+        g.beginPath();
+        for (let i = 0; i <= 24; i++) {
+          const [px, py] = at(progress * i / 24);
+          if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+        }
+        g.stroke();
+      }
+      // 回転の向きを示す弧(いつも回り続ける)
+      const a0 = time * 3.4 * dir;
+      g.strokeStyle = "#e91e63"; g.lineWidth = 2.5; g.lineCap = "round";
+      g.beginPath(); g.arc(sx, sy, 18, a0, a0 + 2.1 * dir, dir < 0); g.stroke();
+      const tip = a0 + 2.1 * dir;
+      const tx = sx + Math.cos(tip) * 18, ty = sy + Math.sin(tip) * 18;
+      const head = tip + dir * Math.PI / 2;
+      g.fillStyle = "#e91e63"; g.beginPath();
+      g.moveTo(tx + Math.cos(head) * 6, ty + Math.sin(head) * 6);
+      g.lineTo(tx + Math.cos(head + 2.4) * 6, ty + Math.sin(head + 2.4) * 6);
+      g.lineTo(tx + Math.cos(head - 2.4) * 6, ty + Math.sin(head - 2.4) * 6);
+      g.closePath(); g.fill();
+      stone(sx, sy, "🐍", false, 12, a0);
+      label("回転した方へ まがる", w * .5, h * .94, "#4a2133", 9);
     } else if (scene === "score") {
       house(w * .36, h * .55, 31); stone(w * .36, h * .55, "🐶"); stone(w * .74, h * .35, "🐻", true); arrow(w * .72, h * .39, w * .9, h * .2); label("SCORE +", w * .72, h * .72, "#e91e63", 15);
     } else if (scene === "blank") {
@@ -3793,7 +3884,26 @@ function drawHowToShots() {
     } else if (scene === "enemies") {
       stone(w * .22, h * .42, "🐻", true, 15); stone(w * .5, h * .42, "🦁", true, 15); stone(w * .78, h * .42, "🐊", true, 15); label("それぞれ違う動き", w * .5, h * .8, "#e91e63", 11);
     }
-  });
+  }
+}
+
+// 遊び方を開いている間だけ、④⑤のコマ送りを回す。閉じたら止める。
+let howToAnimHandle = null;
+function startHowToAnim() {
+  stopHowToAnim();
+  const begin = performance.now();
+  const tick = (now) => {
+    const t = (now - begin) / 1000;
+    document.querySelectorAll(".howToPage.active .howToShot").forEach((canvasEl) => {
+      if (canvasEl.dataset.scene === "throw" || canvasEl.dataset.scene === "spin") drawHowToScene(canvasEl, t);
+    });
+    howToAnimHandle = requestAnimationFrame(tick);
+  };
+  howToAnimHandle = requestAnimationFrame(tick);
+}
+function stopHowToAnim() {
+  if (howToAnimHandle !== null) cancelAnimationFrame(howToAnimHandle);
+  howToAnimHandle = null;
 }
 
 function bindHowTo() {
@@ -3812,10 +3922,10 @@ function bindHowTo() {
     nextButton.textContent = page === 2 ? "はじめる！" : "つぎ";
     pageLabel.textContent = [0, 1, 2].map(index => index === page ? "●" : "○").join("  ");
     if (panel) panel.scrollTop = 0;
-    requestAnimationFrame(drawHowToShots);
+    requestAnimationFrame(() => { drawHowToShots(0); startHowToAnim(); });
   };
   const open = () => { page = 0; overlay.classList.add("show"); renderPage(); };
-  const close = () => overlay.classList.remove("show");
+  const close = () => { overlay.classList.remove("show"); stopHowToAnim(); };
   openButton.addEventListener("click", (e) => { e.stopPropagation(); open(); });
   closeButton.addEventListener("click", (e) => { e.stopPropagation(); close(); });
   prevButton.addEventListener("click", (e) => { e.stopPropagation(); if (page > 0) { page--; renderPage(); } });
