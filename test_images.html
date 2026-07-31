@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>キャラ画像テスト</title>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #fdeef4; color: #4a2133;
+    font-family: 'DotGothic16', system-ui, sans-serif; }
+  h2 { margin: 14px 10px 6px; font-size: 14px; color: #e91e63; }
+  p.note { margin: 0 10px 8px; font-size: 11px; line-height: 1.5; opacity: .8; }
+  canvas { display: block; margin: 0 auto; background: #fce4ec; border-radius: 10px; }
+  .panel { margin: 0 8px 14px; }
+  .ctrl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 0 10px 10px; font-size: 11px; }
+  .ctrl label { display: flex; align-items: center; gap: 4px; }
+  input[type=range] { width: 130px; }
+  .val { color: #e91e63; font-weight: 700; min-width: 42px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<h2>① 5状態と、当たり判定の円</h2>
+<p class="note">
+  赤い円が「半径80px（256px画像の中で）」の当たり判定。
+  緑は今のゲームの石の大きさ（直径38.8px相当）。
+  画像はこの赤円がゲームの当たり判定に一致する倍率で描いています。
+</p>
+<div class="panel"><canvas id="cStates" width="1100" height="300"></canvas></div>
+
+<h2>② 回転（実際の自転速度）</h2>
+<p class="note">
+  左＝最大回転をかけたとき（0.3回転/秒）／右＝ほぼ無回転のとき（1.2回転/秒）。
+  回転方向で spin_clockwise / spin_counterclockwise を出し分けています。
+  いちばん下は今の絵文字表示との比較。
+</p>
+<div class="panel"><canvas id="cSpin" width="1100" height="360"></canvas></div>
+
+<h2>③ 実寸で盤の上に置いた様子</h2>
+<div class="ctrl">
+  <label>画像の倍率 <input id="ratio" type="range" min="0.40" max="1.00" step="0.005" value="0.625">
+    <span class="val" id="ratioV">0.625</span></label>
+  <label><input id="showCircle" type="checkbox" checked> 当たり判定を表示</label>
+  <label><input id="showBase" type="checkbox"> 白い円も描く</label>
+</div>
+<p class="note">
+  倍率＝「画像の中で当たり判定の円が占める割合」。0.625 = 160/256 が指定どおりの値です。
+  小さくすると画像が大きく描かれます。
+</p>
+<div class="panel"><canvas id="cBoard" width="750" height="900"></canvas></div>
+
+<script>
+"use strict";
+
+// ---- ゲーム本体と揃えた値 ---------------------------------------------------
+const PIECE_RADIUS = 36;         // world単位の当たり判定半径
+const VIEW_SCALE = 0.5391;       // iPhone(375x812)で実測した表示倍率
+const SCREEN_R = PIECE_RADIUS * VIEW_SCALE;   // 画面上の半径 = 19.4px
+const SPIN_MIN_RPS = 0.3;        // 最大回転のときの自転
+const SPIN_MAX_RPS = 1.2;        // ほぼ無回転のときの自転
+// 画像の中で当たり判定の円が占める割合。256px画像に半径80pxの円 = 160/256
+let CIRCLE_RATIO = 0.625;
+
+const STATES = ["normal", "excited", "hit", "spin_clockwise", "spin_counterclockwise"];
+const images = {};
+let loaded = 0;
+for (const s of STATES) {
+  const img = new Image();
+  img.onload = () => { loaded++; };
+  img.src = `images/characters/01_${s}.png`;
+  images[s] = img;
+}
+
+// 画像を「当たり判定の半径r」に合わせて描く。rotだけ回す。
+function drawCharacter(g, img, x, y, r, rot) {
+  if (!img.complete || !img.naturalWidth) return;
+  const size = (r * 2) / CIRCLE_RATIO;   // 当たり判定の直径 ÷ 割合 = 描画サイズ
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  g.drawImage(img, -size / 2, -size / 2, size, size);
+  g.restore();
+}
+
+// 今のゲームの見た目(白い円＋絵文字)
+function drawEmojiStone(g, x, y, r, rot, icon) {
+  g.save();
+  g.translate(x, y);
+  g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2);
+  g.fillStyle = "rgba(255,255,255,0.78)"; g.fill();
+  g.rotate(rot);
+  g.font = `${r * 1.65}px "Apple Color Emoji","Segoe UI Emoji",sans-serif`;
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#222";
+  g.fillText(icon, 0, r * 0.04);
+  g.restore();
+}
+
+function ring(g, x, y, r, color, width = 2, dash = null) {
+  g.save();
+  if (dash) g.setLineDash(dash);
+  g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+  g.strokeStyle = color; g.lineWidth = width; g.stroke();
+  g.restore();
+}
+
+function label(g, text, x, y, size = 12, color = "#4a2133") {
+  g.fillStyle = color;
+  g.font = `700 ${size}px 'DotGothic16',sans-serif`;
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(text, x, y);
+}
+
+// ---- ① 5状態 ---------------------------------------------------------------
+function drawStates() {
+  const c = document.getElementById("cStates"), g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const r = 60;                      // 見やすいよう拡大して並べる
+  const step = c.width / STATES.length;
+  STATES.forEach((s, i) => {
+    const x = step * (i + 0.5), y = 130;
+    drawCharacter(g, images[s], x, y, r, 0);
+    ring(g, x, y, r, "rgba(220,30,60,.85)", 2);                    // 当たり判定
+    ring(g, x, y, r * (SCREEN_R / r) * (r / SCREEN_R) * 1, "rgba(0,0,0,0)", 0); // no-op
+    label(g, s, x, 250, 13);
+    label(g, `描画 ${Math.round((r * 2) / CIRCLE_RATIO)}px / 判定 ${r * 2}px`, x, 272, 11, "#8a6474");
+  });
+}
+
+// ---- ② 回転 ----------------------------------------------------------------
+let t0 = performance.now();
+function drawSpin(now) {
+  const c = document.getElementById("cSpin"), g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const sec = (now - t0) / 1000;
+  const r = 46;
+  const cases = [
+    { rps: SPIN_MIN_RPS, dir: 1,  text: "0.3回転/秒・右回り" },
+    { rps: SPIN_MIN_RPS, dir: -1, text: "0.3回転/秒・左回り" },
+    { rps: SPIN_MAX_RPS, dir: 1,  text: "1.2回転/秒・右回り" },
+    { rps: SPIN_MAX_RPS, dir: -1, text: "1.2回転/秒・左回り" },
+  ];
+  const step = c.width / cases.length;
+  cases.forEach((cs, i) => {
+    const x = step * (i + 0.5);
+    const rot = sec * cs.rps * Math.PI * 2 * cs.dir;
+    const img = images[cs.dir > 0 ? "spin_clockwise" : "spin_counterclockwise"];
+    drawCharacter(g, img, x, 110, r, rot);
+    label(g, cs.text, x, 205, 12);
+    // 比較用:今の絵文字表示
+    drawEmojiStone(g, x, 285, r * 0.55, rot, "🐭");
+    label(g, "いまの表示", x, 340, 11, "#8a6474");
+  });
+}
+
+// ---- ③ 実寸 ----------------------------------------------------------------
+function drawBoard(now) {
+  const c = document.getElementById("cBoard"), g = c.getContext("2d");
+  const dpr = 2;                       // iPhone相当で見る
+  if (c.width !== 750) { c.width = 750; }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = c.width / dpr, H = c.height / dpr;
+  g.clearRect(0, 0, W, H);
+
+  // ハウス
+  const hx = W / 2, hy = 200;
+  for (const [rad, col] of [[124, "#8f78bd"], [82, "#fff"], [41, "#ef8aad"], [12, "#fff"]]) {
+    g.beginPath(); g.arc(hx, hy, rad, 0, Math.PI * 2); g.fillStyle = col; g.fill();
+  }
+
+  const sec = (now - t0) / 1000;
+  const showCircle = document.getElementById("showCircle").checked;
+  const showBase = document.getElementById("showBase").checked;
+
+  // ハウスの中に実寸で数体
+  const spots = [
+    { x: hx,       y: hy,       state: "normal",  rot: 0 },
+    { x: hx - 62,  y: hy - 34,  state: "hit",     rot: 0 },
+    { x: hx + 58,  y: hy + 40,  state: "excited", rot: 0 },
+    { x: hx - 30,  y: hy + 78,  state: "normal",  rot: 0 },
+  ];
+  for (const s of spots) {
+    if (showBase) { g.beginPath(); g.arc(s.x, s.y, SCREEN_R, 0, Math.PI * 2); g.fillStyle = "rgba(255,255,255,.78)"; g.fill(); }
+    drawCharacter(g, images[s.state], s.x, s.y, SCREEN_R, s.rot);
+    if (showCircle) ring(g, s.x, s.y, SCREEN_R, "rgba(220,30,60,.8)", 1.5, [3, 3]);
+  }
+  label(g, "ハウスの上に実寸で配置", hx, 350, 12);
+
+  // 滑走中(回転あり)を横一列
+  const rowY = 420;
+  for (let i = 0; i < 5; i++) {
+    const x = 70 + i * 78;
+    const rot = sec * SPIN_MIN_RPS * Math.PI * 2;
+    if (showBase) { g.beginPath(); g.arc(x, rowY, SCREEN_R, 0, Math.PI * 2); g.fillStyle = "rgba(255,255,255,.78)"; g.fill(); }
+    drawCharacter(g, images.spin_clockwise, x, rowY, SCREEN_R, rot);
+    if (showCircle) ring(g, x, rowY, SCREEN_R, "rgba(220,30,60,.8)", 1.5, [3, 3]);
+  }
+  label(g, "滑走中(右回転・0.3回転/秒)", W / 2, 470, 12);
+
+  // 密着させて、当たり判定どうしが触れている状態を見る
+  const packY = 545;
+  for (let i = 0; i < 4; i++) {
+    const x = W / 2 - SCREEN_R * 3 + i * SCREEN_R * 2;
+    if (showBase) { g.beginPath(); g.arc(x, packY, SCREEN_R, 0, Math.PI * 2); g.fillStyle = "rgba(255,255,255,.78)"; g.fill(); }
+    drawCharacter(g, images.normal, x, packY, SCREEN_R, 0);
+    if (showCircle) ring(g, x, packY, SCREEN_R, "rgba(220,30,60,.8)", 1.5, [3, 3]);
+  }
+  label(g, "当たり判定どうしがぴったり触れている状態", W / 2, 600, 12);
+
+  // 絵文字との混在(画像がないキャラは絵文字のまま)
+  const mixY = 670;
+  drawCharacter(g, images.normal, W / 2 - 60, mixY, SCREEN_R, 0);
+  drawEmojiStone(g, W / 2, mixY, SCREEN_R, 0, "🐍");
+  drawEmojiStone(g, W / 2 + 60, mixY, SCREEN_R, 0, "🐵");
+  label(g, "画像キャラと絵文字キャラの混在", W / 2, 720, 12);
+
+  // デロルスで1.7倍にされたとき
+  const bigY = 800;
+  drawCharacter(g, images.normal, W / 2 - 70, bigY, SCREEN_R, 0);
+  drawCharacter(g, images.normal, W / 2 + 40, bigY, SCREEN_R * 1.7, 0);
+  if (showCircle) {
+    ring(g, W / 2 - 70, bigY, SCREEN_R, "rgba(220,30,60,.8)", 1.5, [3, 3]);
+    ring(g, W / 2 + 40, bigY, SCREEN_R * 1.7, "rgba(220,30,60,.8)", 1.5, [3, 3]);
+  }
+  label(g, "デロルスで1.7倍にされたとき", W / 2, 870, 12);
+}
+
+document.getElementById("ratio").addEventListener("input", (e) => {
+  CIRCLE_RATIO = parseFloat(e.target.value);
+  document.getElementById("ratioV").textContent = CIRCLE_RATIO.toFixed(3);
+  drawStates();
+});
+
+function tick(now) {
+  drawSpin(now);
+  drawBoard(now);
+  requestAnimationFrame(tick);
+}
+// 画像が揃ってから初回描画
+const waitReady = setInterval(() => {
+  if (loaded >= STATES.length) { clearInterval(waitReady); drawStates(); }
+}, 60);
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

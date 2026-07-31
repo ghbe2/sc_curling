@@ -308,6 +308,9 @@
   #throwTutorial.minimized .tutorialBody { display: none; }
   .tutorialStep { margin-bottom: 5px; opacity: 0.46; }
   .tutorialStep.active { opacity: 1; color: #e91e63; }
+  /* いまの操作段階ではないが、いつでも戻れることを示す(狙い決定後の「ねらう」) */
+  .tutorialStep.redo { opacity: 0.85; color: #4a2133; }
+  .tutorialStep.redo #aimInstruction { color: #e91e63; }
   .tutorialTitle { display: block; margin-bottom: 3px; font-size: 11px; }
   .tutorialGesture { position: relative; height: 28px; font-size: 19px; line-height: 1; text-align: center; margin: 1px 0; }
   .gestureFinger { position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
@@ -1030,12 +1033,14 @@ function createInitialHand() {
 
 // 手札カードを「置く/合体」する。ランチャーに既に同じ石が置かれていれば合体(1段階進化)、
 // そうでなければその石を置く(選択)。タップでもドラッグでも呼ばれる。
-function activateHandCard(index) {
+// allowMerge=false のときは合体しない(タップは「選ぶ」だけ)。
+// タップで合体まで起きると、置いたつもりのキャラが消えたように見えるため。
+function activateHandCard(index, allowMerge = true) {
   if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
   const staged = game.selectedHandIndex;
   const thisChar = game.hand[index];
   if (!thisChar) return;
-  const canMerge = staged !== null && staged !== index && !game.stagedEvolved &&
+  const canMerge = allowMerge && staged !== null && staged !== index && !game.stagedEvolved &&
     game.hand[staged] && game.hand[staged].id === thisChar.id;
   if (canMerge) {
     // 合体:置いてある石が進化。重ねた側のスロットは「空き」にする。
@@ -1184,6 +1189,7 @@ function renderHand() {
       e.stopPropagation();
       e.preventDefault();
       if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
+      const startX = e.clientX, startY = e.clientY;
       game.carry = { index, character, x: e.clientX, y: e.clientY };
       button.classList.add("carrying"); // 掴んだ瞬間からソケットの受け皿は空になる(物理的に持ち出す)
       try { button.setPointerCapture?.(e.pointerId); } catch (_) {}
@@ -1195,11 +1201,18 @@ function renderHand() {
         button.classList.remove("carrying");
         const dropX = ev?.clientX ?? game.carry?.x, dropY = ev?.clientY ?? game.carry?.y;
         game.carry = null;
-        // 掴んで「下の◯(投球位置)」まで運んだときだけ置く/合体。タップだけでは置かない。
         const ls = toScreen(launcherPos().x, launcherPos().y);
         const dropRadius = Math.min(window.innerWidth, window.innerHeight) * 0.45;
-        if (Math.hypot(dropX - ls.x, dropY - ls.y) <= dropRadius) activateHandCard(index);
-        else renderHand(); // 運ばなかった石はソケットへ戻す
+        // 指がほとんど動いていなければ「タップ」。ソケットの位置によっては投球位置に近く、
+        // タップでも運んだ扱いになって勝手に合体してしまうため、動いた距離で分ける。
+        const dragged = Math.hypot(dropX - startX, dropY - startY) > 20;
+        if (!dragged) {
+          activateHandCard(index, false);   // タップ:選ぶだけ。合体はしない
+        } else if (Math.hypot(dropX - ls.x, dropY - ls.y) <= dropRadius) {
+          activateHandCard(index, true);    // 投球位置まで運んだ:置く/合体
+        } else {
+          renderHand();                     // 途中で放した石はソケットへ戻す
+        }
       };
       button.addEventListener("pointermove", move);
       button.addEventListener("pointerup", up);
@@ -1648,16 +1661,18 @@ function updateThrowTutorial() {
     if (selectSub) selectSub.textContent = "重ねてパワーアップ";
   }
 
-  // ② ねらう
+  // ② ねらう。狙いを決めたあとも薄くせず「引いてやり直せる」ことを出し続ける
+  // (やり直し方が分かりづらいとの指摘に対応)。
   aimStep?.classList.toggle("active", aiming);
-  aimStep?.classList.toggle("pull", aiming && !adjusting && !launching);
+  aimStep?.classList.toggle("redo", launching);
+  aimStep?.classList.toggle("pull", (aiming && !adjusting && !launching) || launching);
   aimStep?.classList.toggle("adjust", aiming && adjusting);
   const aimArrow = document.getElementById("aimGestureArrow");
   const aimInstruction = document.getElementById("aimInstruction");
   const aimSub = document.getElementById("aimSub");
   if (aimArrow) aimArrow.textContent = adjusting ? "←　→" : "↓";
-  if (aimInstruction) aimInstruction.textContent = adjusting ? "離して決定" : "下へ引く";
-  if (aimSub) aimSub.textContent = adjusting ? "ここで指を離す" : "狙いを決める";
+  if (aimInstruction) aimInstruction.textContent = launching ? "引いてやり直す" : (adjusting ? "離して決定" : "下へ引く");
+  if (aimSub) aimSub.textContent = launching ? "ねらい直せる" : (adjusting ? "ここで指を離す" : "狙いを決める");
 
   // ③ なげる:縦=スピードバー(下から満ちる)/ 横=カーブバー(中央基準)。押し量・横ズレをバーに反映。
   throwStep?.classList.toggle("active", launching);
