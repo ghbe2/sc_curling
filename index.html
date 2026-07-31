@@ -99,7 +99,9 @@
     color: #222;
     background: radial-gradient(circle at 38% 32%, #ffffff, #f2eef0 70%);
     box-shadow: 0 2px 7px rgba(0,0,0,0.35);
-    touch-action: manipulation;
+    /* none にして、掴んで運ぶ操作をブラウザのスクロール等に横取りさせない
+       (横取りされると pointercancel で運搬が中断され、受け皿が空のまま残る) */
+    touch-action: none;
   }
   .handCard .icon { display: block; font-size: calc(var(--stone-size, 40px) * 0.62); line-height: 1; }
   /* 運搬中は、その石はソケットから物理的に持ち出されているので受け皿を空にする */
@@ -1152,9 +1154,21 @@ function hideAbilityInfo() {
   game.abilityAnchor = null;
 }
 
+// いま画面に触れている指のID。運搬が生きているかの判定に使う。
+const activePointers = new Set();
+window.addEventListener("pointerdown", (e) => activePointers.add(e.pointerId), true);
+window.addEventListener("pointerup", (e) => activePointers.delete(e.pointerId), true);
+window.addEventListener("pointercancel", (e) => activePointers.delete(e.pointerId), true);
+function pointerStillDown(id) { return activePointers.has(id); }
+
 function renderHand() {
   const bar = document.getElementById("handBar");
   if (!bar) return;
+  // 保険:運搬が何かの拍子に中断され、carryが残ったままだと受け皿がずっと空に見える。
+  // 指がもう画面に無いなら、ここで解除する。
+  if (game.carry && game.carry.pointerId !== undefined && !pointerStillDown(game.carry.pointerId)) {
+    game.carry = null;
+  }
   bar.classList.toggle("hidden", game.phase !== "aim" || game.gameOver);
   bar.classList.toggle("refilling", game.refillHandIndex !== null);
   bar.replaceChildren();
@@ -1192,14 +1206,23 @@ function renderHand() {
       e.preventDefault();
       if (!game.launcherReady || game.shotInProgress || game.phase !== "aim") return;
       const startX = e.clientX, startY = e.clientY;
-      game.carry = { index, character, x: e.clientX, y: e.clientY };
+      game.carry = { index, character, x: e.clientX, y: e.clientY, pointerId: e.pointerId };
       button.classList.add("carrying"); // 掴んだ瞬間からソケットの受け皿は空になる(物理的に持ち出す)
       try { button.setPointerCapture?.(e.pointerId); } catch (_) {}
       const move = (ev) => { if (game.carry) { game.carry.x = ev.clientX; game.carry.y = ev.clientY; } };
+      let finished = false;
       const up = (ev) => {
+        if (finished) return;
+        finished = true;
+        // 後始末は必ず全部外す。iOSはスクロール等で指を横取りしたとき pointercancel を
+        // 要素ではなく上位へ投げることがあり、ボタンだけに付けていると up が呼ばれずに
+        // carrying(非表示)が残ってしまう。=「触っただけでキャラが消える」の原因。
         button.removeEventListener("pointermove", move);
         button.removeEventListener("pointerup", up);
         button.removeEventListener("pointercancel", up);
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
         button.classList.remove("carrying");
         const dropX = ev?.clientX ?? game.carry?.x, dropY = ev?.clientY ?? game.carry?.y;
         game.carry = null;
@@ -1217,6 +1240,10 @@ function renderHand() {
       button.addEventListener("pointermove", move);
       button.addEventListener("pointerup", up);
       button.addEventListener("pointercancel", up);
+      // 指がボタンの外へ出ても確実に終われるよう、窓側にも同じ後始末を張る
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
     });
     bar.appendChild(button);
   });
