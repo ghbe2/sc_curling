@@ -950,7 +950,7 @@ const CHARACTERS = [
   // ユゥナリナ:その場から相手を動かす担当。相手をよく飛ばし、敵の「飛びづらい」系の能力
   // (アルバ/ジーナ・マミ/マルガリティフェラ)にもいくらか通る。
   // pierceGuardは「有効打になる」程度に留める。確実にテイクできてしまうと鉄壁の意味が消えるため。
-  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "あてたとき 相手を よく飛ばす。",
+  { id: "yuunarina", name: "ユゥナリナ", icon: "🐔", color: "#e9c8da", trait: "守りの かたい 相手にも 通る。",
     mods: { knockPower: 1.5, pierceGuard: 0.22 } },
   // モコクン:軌道予測はこちらへ移動(通常=相手の飛ぶ方向、進化=自分の飛ぶ方向)
   { id: "mokokun", name: "モコクン", icon: "🐶", color: "#9dd6bb", trait: "相手を 飛ばす 方向が 分かる。", mods: { trajectoryGuide: true } },
@@ -1093,7 +1093,7 @@ const EVOLVE_TRAIT_TEXT = {
   hiroibeo: "もう少し広く 敵を 引き寄せる。",
   pafu: "敵に あてたとき ぴたりと止まる。",
   mayuu: "スコアが 3倍 もらえる。",
-  yuunarina: "飛ばした キャラも、同じように 相手を よく飛ばす。",
+  yuunarina: "飛ばした キャラも、同じように 守りを 通す。",
   mokokun: "自分を 飛ばす 方向が 分かる。",
   mizu: "あたったとき もっと 弾く。",
 };
@@ -2622,6 +2622,15 @@ function physicsStep() {
               tSpeed *= 0.15;
               sSpeed *= 0.5;
             }
+
+            // 能力の倍率を掛け終えたところで、物理として説明できる上限を超えないようにする。
+            // 弾性衝突で相手が受け取れる最大は 2*mS/(mS+mT) 倍。同じ大きさなら1.0倍=
+            // 「投げた石より速く飛んでいくことはない」。相手が小さい(軽い)ときだけ超えられる。
+            // 質量は面積とみなして半径の2乗で見る。
+            const massS = pieceRadius(S) ** 2, massT = pieceRadius(T) ** 2;
+            const maxTransfer = 2 * massS / (massS + massT);
+            tSpeed = Math.min(tSpeed, impact * maxTransfer);
+
             const Told_x = T.vx, Told_y = T.vy;
             S.vx = Told_x + tx * sSpeed; S.vy = Told_y + ty * sSpeed;
             // テイクされた石は、接触点から石の中心へ向かう法線上に進む。
