@@ -2479,7 +2479,15 @@ function physicsStep() {
     for (const p of game.pieces) {
       if (p.state !== "onboard") continue;
       const speed = Math.hypot(p.vx, p.vy);
-      if (speed < CONFIG.SETTLE_SPEED) { p.vx = 0; p.vy = 0; continue; }
+      if (speed < CONFIG.SETTLE_SPEED) {
+        p.vx = 0; p.vy = 0;
+        // 止まったら通常の顔に戻すので、傾いたままだと不自然。少しずつ正立へ戻す。
+        if (p.rot) {
+          const wrapped = ((p.rot + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+          p.rot = Math.abs(wrapped) < 0.012 ? 0 : wrapped * 0.86;
+        }
+        continue;
+      }
 
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
       // curveSpeedEase<1 は速度による曲がり抑制を弱める(=速いショットでも曲がる。アウネ)
@@ -2884,10 +2892,9 @@ function showBestShotResult() {
       if (d <= touching * 1.35 && shotR > CONFIG.HOUSE_RADIUS / 12) { freeze = true; break; }
     }
   }
-  // スルー:何にも当たらず、ハウスにも残らなかった(プレイエリア外へ消えた場合も含む)
-  const stayedInHouse = Boolean(shot && shot.entered && shotR <= CONFIG.HOUSE_RADIUS);
-  const through = !hitSomething && game.chainCountThisThrow === 0
-    && !game.passedThroughPort && !freeze && !stayedInHouse;
+  // スルー:何にも当たらず、そのままプレイエリアの外へ出てしまった投球。
+  // ハウスの手前で止まった場合は盤上に残っているのでスルーとは呼ばない。
+  const through = !hitSomething && shotLeftArea;
 
   // 「ハウスの外にいたなかまを、この投球で動かしてハウスへ入れた」か。
   // ランバックもロールインも、動かす対象はハウスの外にいたなかまに限る
@@ -3744,9 +3751,11 @@ function pieceImageName(p) {
   if (!no) return null;
   // ぶつかった直後だけヒット顔。回転より優先する
   if (p.hitFaceUntil && performance.now() < p.hitFaceUntil) return `${no}_hit`;
-  // 回転をかけているあいだは、向きに合わせて傾いた絵を使う。
+  // 回転絵は「滑っているあいだ」だけ。止まったら通常(または合体後)の顔に戻す。
+  // curveは止まっても残るので、速度で見る(止まった石はvx/vyがちょうど0になる)。
+  const moving = p.vx !== 0 || p.vy !== 0;
   // curveは衝突で符号が反転しうるので、毎フレーム現在の値から選ぶ。
-  if (p.curve) {
+  if (moving && p.curve) {
     const dir = p.curve > 0 ? "spin_clockwise" : "spin_counterclockwise";
     // ヒロイベオは合体すると額を出すので、回転絵も専用のものに差し替える
     if (p.characterId === "hiroibeo" && p.evolved) return `${no}_${dir}_b`;
