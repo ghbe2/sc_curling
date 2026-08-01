@@ -241,6 +241,17 @@
   }
   #gameOverTitle { font-size: 25px; font-weight: 800; margin-bottom: 8px; }
   #gameOverText { font-size: 13px; opacity: 0.8; margin-bottom: 16px; }
+  /* 決めたトリックの振り返り。名前・回数・点を3列に揃える */
+  .gameOverTricks {
+    margin: 9px auto 0; max-width: 250px; max-height: 210px; overflow-y: auto;
+    border-top: 1px solid rgba(255,255,255,0.22); padding-top: 7px;
+  }
+  .gameOverTrick {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 8px;
+    align-items: baseline; font-size: 11px; line-height: 1.5; text-align: left;
+  }
+  .gameOverTrickN { opacity: 0.7; }
+  .gameOverTrickP { min-width: 52px; text-align: right; font-weight: 700; }
   #sideInfo {
     position: fixed; left: 8px; top: 8px; z-index: 5;
     /* 縦に積むだけの入れ物。子は自分の幅で置き、長いトリック名が出ても
@@ -493,6 +504,10 @@
   .characterCard { display: grid; place-items: center; align-content: center; gap: 3px; min-width: 0; padding: 5px; border: 1px solid #f5b0c8; border-radius: 12px; background: white; text-align: center; box-shadow: 0 3px 9px rgba(80,30,50,.08); }
   .characterCard.enemy { color: #fff; background: #17131c; border-color: #ff6e9e; }
   .characterCardIcon { font-size: 28px; line-height: 1; }
+  /* 図鑑のアイコンを画像にしたときの大きさ。絵文字と同じ幅に収めて、
+     名前が折り返さないようにする(味方は12枚並ぶので特に幅が厳しい) */
+  .characterCardImage { display: block; width: 34px; height: 34px; object-fit: contain; }
+  .characterBookPage:not(.enemyPage) .characterCardImage { width: 26px; height: 26px; }
   .characterCardName { color: #e91e63; font-size: 12px; font-weight: 700; }
   .characterCard.enemy .characterCardName { color: #ff8eb5; }
   /* 説明は改行前提。2行ぶんの高さを常に確保して、進化前後を切り替えても名前の位置がずれないようにする */
@@ -898,6 +913,7 @@ const game = {
     characterBonus: 0,
     trickBonus: 0,
     throughPenalty: 0,
+    trickCounts: {},   // トリックID → { n: 回数, points: 実際の増減 }
   },
   wave: 1,
   enemySerial: 0,
@@ -1576,6 +1592,7 @@ function buildSurvivalGame() {
   game.score.characterBonus = 0;
   game.score.trickBonus = 0;
   game.score.throughPenalty = 0;
+  game.score.trickCounts = {};
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.hitStopFrames = 0;
   game.fxRings = [];
@@ -2185,12 +2202,24 @@ function showGameOver(enemy) {
   const score = calculateScore();
   // A対応:「〇〇が居座った」の説明文は不要。スコア(と到達ターン)を主役にする
   const rank = currentScoreRank(score.total);
-  const next = nextScoreRank(score.total);
+  // 決めたトリックを、TRICKSの並び順で「回数×合計点」として振り返る。
+  // 出していないトリックは行ごと出さない。
+  const counts = game.score.trickCounts ?? {};
+  const trickRows = TRICKS.filter(t => counts[t.id]?.n).map(t => {
+    const { n, points } = counts[t.id];   // pointsはマユゥの倍率も込みの実際の増減
+    const sign = points < 0 ? "" : "+";
+    const color = points < 0 ? "#ff9db4" : "#ffe36e";
+    return `<div class="gameOverTrick"><span>${t.name}</span>`
+      + `<span class="gameOverTrickN">${n}回</span>`
+      + `<span class="gameOverTrickP" style="color:${color}">${sign}${points}</span></div>`;
+  }).join("");
   document.getElementById("gameOverText").innerHTML =
     `<div style="font-size:26px;font-weight:800;opacity:1;color:#ffe36e;margin-bottom:4px;">SCORE ${score.total}</div>` +
     `<div style="font-size:16px;margin-bottom:3px;">${rank.icon} ${rank.name}</div>` +
     `<div style="font-size:13px;opacity:0.85;">到達ターン ${game.turn}</div>` +
-    (next ? `<div style="font-size:11px;opacity:0.7;margin-top:4px;">つぎは ${next.score} てんで「${next.name}」</div>` : "");
+    (trickRows
+      ? `<div class="gameOverTricks">${trickRows}</div>`
+      : `<div style="font-size:11px;opacity:0.65;margin-top:8px;">トリックは まだ 出ていない</div>`);
   document.getElementById("gameOver").classList.add("show");
   renderHand();
 }
@@ -2875,6 +2904,15 @@ function showBestShotResult() {
 }
 
 // トリック1件ぶんの呼称表示と加点。マユゥなどの倍率はここでまとめてかける。
+// 決めたトリックを回数と実際の増減で控える(ゲームオーバー画面の振り返り用)
+function tallyTrick(trickId, points) {
+  if (!game.score.trickCounts) game.score.trickCounts = {};
+  const row = game.score.trickCounts[trickId] ?? { n: 0, points: 0 };
+  row.n += 1;
+  row.points += points;
+  game.score.trickCounts[trickId] = row;
+}
+
 function awardTrick(trickId) {
   const trick = TRICK_BY_ID[trickId];
   if (!trick) return;
@@ -2882,6 +2920,7 @@ function awardTrick(trickId) {
     // 減点は倍率の対象外(「スコアが2倍もらえる」なので、損は増やさない)
     showScoreEvent(trick.label);
     game.score.throughPenalty = (game.score.throughPenalty ?? 0) + (-trick.score);
+    tallyTrick(trickId, trick.score);
     return;
   }
   // 倍率は投球時に控えた値を使う。ピールのように投げたキャラがプレイエリアの外へ
@@ -2891,6 +2930,7 @@ function awardTrick(trickId) {
   showScoreEvent(`${trick.label} +${gained}`);
   game.score.trickBonus = (game.score.trickBonus ?? 0) + trick.score;
   if (scoreMult > 1) game.score.characterBonus += gained - trick.score;
+  tallyTrick(trickId, gained);
 }
 
 function showScoreEvent(text) {
@@ -3640,6 +3680,9 @@ const CHAR_IMAGE_NO = {               // 味方:CHARACTERSの並び順と一致
 const ENEMY_IMAGE_NO = {
   pride: "23", greed: "24", gluttony: "25", wrath: "26", sloth: "27", lust: "28", envy: "29",
 };
+// 遊び方の挿絵は絵文字で書かれているので、絵文字から番号を引けるようにしておく
+const HOWTO_ALLY_BY_ICON = Object.fromEntries(CHARACTERS.map(c => [c.icon, CHAR_IMAGE_NO[c.id]]));
+const HOWTO_ENEMY_BY_ICON = Object.fromEntries(ENEMIES.map(e => [e.icon, ENEMY_IMAGE_NO[e.id]]));
 const charImages = new Map();         // ファイル名 → Image(読み込み中もそのまま入れる)
 const charImageMissing = new Set();   // 404だったもの。二度と要求しない
 function charImage(name) {
@@ -3648,6 +3691,10 @@ function charImage(name) {
   if (!img) {
     img = new Image();
     img.onerror = () => { charImageMissing.add(name); charImages.delete(name); };
+    // 遊び方の挿絵は開いたときに1回描くだけなので、後から読み終わった絵を反映させる
+    img.onload = () => {
+      if (document.getElementById("howToOverlay")?.classList.contains("show")) drawHowToShots(0);
+    };
     img.src = `images/characters/${name}.png`;
     charImages.set(name, img);
   }
@@ -4024,7 +4071,18 @@ function drawHowToScene(canvasEl, time = 0) {
         g.beginPath(); g.arc(x, y, radius, 0, Math.PI * 2); g.fillStyle = color; g.fill();
       }
     };
+    // 挿絵のキャラも、盤の上と同じ絵を使う。絵文字は同じものが敵味方で被る
+    // (🐴=ヒロイベオ/エノ、🐵=マユゥ/ウーヨン)ので、enemyの別で引き分ける。
     const stone = (x, y, icon, enemy = false, r = 12, rot = 0) => {
+      const no = (enemy ? HOWTO_ENEMY_BY_ICON : HOWTO_ALLY_BY_ICON)[icon];
+      const img = no ? charImage(`${no}_normal`) : null;
+      if (img) {
+        const size = (r * 2) / CHAR_IMAGE_RATIO;
+        g.save(); g.translate(x, y); g.rotate(rot);
+        g.drawImage(img, -size / 2, -size / 2, size, size);
+        g.restore();
+        return;
+      }
       g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = enemy ? "#17131c" : "rgba(255,255,255,.9)"; g.fill();
       g.strokeStyle = enemy ? "#ff6e9e" : "#6a4a59"; g.lineWidth = 2; g.stroke();
       g.font = `${r * 1.25}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
@@ -4258,10 +4316,15 @@ function buildCharacterBookPages() {
       card.className = "characterCard" + (group.enemy ? " enemy" : "");
       const title = character.name; // 大罪の表記は出さない
       const evolvedTrait = group.enemy ? null : EVOLVE_TRAIT_TEXT[character.id];
-      card.innerHTML = `<div class="characterCardIcon">${character.icon}</div>`
+      // アイコンは画像があれば画像、無ければ絵文字
+      const no = group.enemy ? ENEMY_IMAGE_NO[character.id] : CHAR_IMAGE_NO[character.id];
+      const iconHtml = no
+        ? `<img class="characterCardImage" alt="" src="images/characters/${no}_normal.png">`
+        : character.icon;
+      card.innerHTML = `<div class="characterCardIcon">${iconHtml}</div>`
         + `<div class="characterCardName">${title}</div>`
         + `<div class="characterCardTrait">${character.trait}</div>`;
-      // 味方カードはタップで「進化前 ⇄ 進化後」を切り替える
+      // 味方カードはタップで「進化前 ⇄ 進化後」を切り替える。絵も合体後の顔に変わる。
       if (evolvedTrait) {
         let showEvolved = false;
         card.classList.add("switchable");
@@ -4271,6 +4334,8 @@ function buildCharacterBookPages() {
           card.classList.toggle("evolved", showEvolved);
           card.querySelector(".characterCardName").textContent = showEvolved ? `${title} ★` : title;
           card.querySelector(".characterCardTrait").textContent = showEvolved ? evolvedTrait : character.trait;
+          const img = card.querySelector(".characterCardImage");
+          if (img && no) img.src = `images/characters/${no}_${showEvolved ? "excited" : "normal"}.png`;
         });
       }
       page.appendChild(card);
