@@ -1248,6 +1248,8 @@ function renderHand() {
     button.dataset.partType = character.mods.partType ?? "none";
     button.setAttribute("aria-pressed", "false");
     // ボール(石)の見た目:アイコンのみ。名前・特性はここには出さず、置いたとき画面中央に出す。
+    // 手札に並んだ時点で、そのキャラの5状態を先に読ませておく(投げてから慌てて読まない)
+    warmCharacterImages(character.id);
     // 受け皿もフィールドと同じ絵にする。画像が無いキャラは絵文字のまま。
     const socketNo = CHAR_IMAGE_NO[character.id];
     if (socketNo && !charImageMissing.has(`${socketNo}_normal`)) {
@@ -1430,6 +1432,13 @@ function spawnEnemy(enemyIndex = game.enemySerial, angle = null) {
   p.spawnAge = -0.001 - Math.min(0.22, (enemyIndex % ENEMIES.length) * 0.035);
   p.spawnPopped = false;
   if (enemy.id === "greed") p.ginaForm = "jina";
+  // 出てくる前に絵を読ませておく(ジーナは入れ替わるマミの絵も要る)
+  const enemyNo = ENEMY_IMAGE_NO[enemy.id];
+  if (enemyNo) {
+    charImage(`${enemyNo}_normal`);
+    if (enemy.id === "greed") charImage(`${enemyNo}_normal_b`);
+    if (enemy.id === "sloth") charImage("27_normal_b"); // ウェンカが生む分身のムイ
+  }
   game.pieces.push(p);
   game.enemySerial++;
   return p;
@@ -3730,8 +3739,29 @@ function charImage(name) {
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
 
+const CHAR_STATES = ["normal", "excited", "hit", "spin_clockwise", "spin_counterclockwise"];
+// そのキャラが使う絵を先に読ませておく。読み込み中は絵文字に落ちて一瞬ちらつくため、
+// 手札に入った時点・盤に出た時点でまとめて要求しておく(すでに要求済みなら何もしない)。
+function warmCharacterImages(characterId) {
+  const no = CHAR_IMAGE_NO[characterId];
+  if (!no) return;
+  for (const s of CHAR_STATES) charImage(`${no}_${s}`);
+  if (characterId === "hiroibeo") {
+    charImage(`${no}_spin_clockwise_b`);
+    charImage(`${no}_spin_counterclockwise_b`);
+  }
+}
+
 // この石がいま出すべき画像名を決める。無ければnull(=絵文字で描く)。
+// まだ読み込めていない絵を指したときは、直前に出していた絵を出し続ける。
 function pieceImageName(p) {
+  const want = desiredPieceImage(p);
+  if (!want) return null;
+  if (charImage(want)) { p.lastImageName = want; return want; }
+  return p.lastImageName ?? null;
+}
+
+function desiredPieceImage(p) {
   if (p.role === "enemy") {
     // 敵は1枚だけ。回転もヒットも差し替えない(素材を絞っているため)
     if (p.enemyId === "mui") return "27_normal_b";
