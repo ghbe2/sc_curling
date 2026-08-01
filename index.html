@@ -104,6 +104,14 @@
     touch-action: none;
   }
   .handCard .icon { display: block; font-size: calc(var(--stone-size, 40px) * 0.62); line-height: 1; }
+  /* キャラ画像を使う受け皿は、白い円をやめて絵だけにする(耳や角は枠の外へ出る)。
+     画像の中でボールは 160/256 なので、枠に合わせるには 256/160 倍に広げる。 */
+  .handCard.hasImage { border: 0; background: none; box-shadow: none; overflow: visible; }
+  .handCard .ballImage {
+    width: calc(var(--stone-size, 40px) * 1.6); height: calc(var(--stone-size, 40px) * 1.6);
+    display: block; pointer-events: none;
+    filter: drop-shadow(0 2px 5px rgba(80,30,50,0.32));
+  }
   /* 運搬中は、その石はソケットから物理的に持ち出されているので受け皿を空にする */
   .handCard.carrying { visibility: hidden; }
   /* ソケットの中の石は、止まらずゆっくり滑り続ける(位置はJSで物理的に更新する) */
@@ -716,6 +724,11 @@ const CONFIG = {
    * そこで滑走時間に依存しない「実1秒あたりの回転数(rps)」を直接指定する方式に変更。
    * どの投球についても、見ている間のスピン速度そのものが常に約4倍の差になる
    * --- */
+  // 狙いを定めているあいだ、ボールの円からはみ出した絵をどこまで薄くするか。
+  // 耳や角が大きいキャラは、絵が重なって見えるのに判定は当たっていないことがあるため、
+  // 狙っている間だけ「効くのはこの円まで」を見せる。指を離すと元に戻る。
+  AIM_OUTSIDE_ALPHA: 0.3,
+  HIT_FACE_MS: 420,          // ぶつかった直後にヒット顔を出す時間(実時間)
   SPIN_VISUAL_MIN_RPS: 0.3,  // CURVE_MIN(最も曲がる)時の自転速度(実1秒あたりの回転数)
   SPIN_VISUAL_MAX_RPS: 1.2,  // curve=1.0(ほぼ直進)時の自転速度(同、ちょうど4倍)
 
@@ -1197,7 +1210,14 @@ function renderHand() {
     button.dataset.partType = character.mods.partType ?? "none";
     button.setAttribute("aria-pressed", "false");
     // ボール(石)の見た目:アイコンのみ。名前・特性はここには出さず、置いたとき画面中央に出す。
-    button.innerHTML = `<span class="icon">${character.icon}</span>`;
+    // 受け皿もフィールドと同じ絵にする。画像が無いキャラは絵文字のまま。
+    const socketNo = CHAR_IMAGE_NO[character.id];
+    if (socketNo && !charImageMissing.has(`${socketNo}_normal`)) {
+      button.classList.add("hasImage");
+      button.innerHTML = `<img class="ballImage" alt="" src="images/characters/${socketNo}_normal.png">`;
+    } else {
+      button.innerHTML = `<span class="icon">${character.icon}</span>`;
+    }
     button.setAttribute("aria-label", `${character.name}（${character.trait}）`);
     button.style.setProperty("--ball-color", character.color);
     // 掴んで運ぶ:pointerdownで運搬開始、pointerupで「置く/合体」を判定(タップでも同ロジックで動く)
@@ -2511,6 +2531,10 @@ function physicsStep() {
 
           S.hasCollided = true;
           T.hasCollided = true;
+          // ぶつかった直後だけヒット顔にする(実時間で数えるので早送り中も同じ長さ)
+          const hitFaceEnd = performance.now() + CONFIG.HIT_FACE_MS;
+          S.hitFaceUntil = hitFaceEnd;
+          T.hitFaceUntil = hitFaceEnd;
           // 投げた石が何かに当たったことを投球単位で記録する。石が盤外へ出て消えても残るので、
           // 「当たったのにスルー判定になる」誤判定を防げる
           if (S.isCurrentShot || T.isCurrentShot) {
@@ -3576,7 +3600,10 @@ function render() {
       ctx.stroke();
       ctx.restore();
     }
-    drawPiece(drawX, drawY, r, p.color ?? ROLE_COLOR[p.role], drawRot, alpha, p.mods.partType, p.icon, p.role === "enemy");
+    // 狙っているあいだだけ、円からはみ出した絵を薄くする(案3)
+    const dimOutside = game.aim !== null;
+    drawPiece(drawX, drawY, r, p.color ?? ROLE_COLOR[p.role], drawRot, alpha, p.mods.partType, p.icon,
+      p.role === "enemy", pieceImageName(p), dimOutside);
   }
 
   ctx.restore(); // 衝突演出の変換を解除
@@ -3589,14 +3616,109 @@ function render() {
     const c = game.carry;
     // フィールド上と同じ実寸で描く(指の位置=石の中心)
     const rr = CONFIG.PIECE_RADIUS * (c.character.mods.radiusScale ?? 1) * view.scale;
+    const carryNo = CHAR_IMAGE_NO[c.character.id];
     ctx.save();
     ctx.globalAlpha = 0.95;
-    drawPiece(c.x, c.y, rr, c.character.color ?? ROLE_COLOR.player, 0, 1, c.character.mods.partType, c.character.icon);
+    drawPiece(c.x, c.y, rr, c.character.color ?? ROLE_COLOR.player, 0, 1, c.character.mods.partType, c.character.icon,
+      false, carryNo ? `${carryNo}_normal` : null);
     ctx.restore();
   }
 }
 
-function drawPiece(x, y, r, color, rot, alpha, partType = null, icon = null, enemyStyle = false) {
+/* =========================================================================
+ * キャラ画像
+ *  images/characters/<番号>_<状態>.png、256px四方・背景透過。
+ *  絵の中心がボールの中心で、ボール(当たり判定)は画像の中で半径80px。
+ *  つまり描画サイズ = 当たり判定の直径 ÷ (160/256)。耳や角はここからはみ出す。
+ *  画像が無いキャラは今までどおり絵文字で描く(混在しても破綻しない)。
+ * ========================================================================= */
+const CHAR_IMAGE_RATIO = 160 / 256;   // 画像の中でボールが占める割合
+const CHAR_IMAGE_NO = {               // 味方:CHARACTERSの並び順と一致
+  minari: "01", belpet: "02", rako: "03", barni: "04", riu: "05", aune: "06",
+  hiroibeo: "07", pafu: "08", mayuu: "09", yuunarina: "10", mokokun: "11", mizu: "12",
+};
+const ENEMY_IMAGE_NO = {
+  pride: "23", greed: "24", gluttony: "25", wrath: "26", sloth: "27", lust: "28", envy: "29",
+};
+const charImages = new Map();         // ファイル名 → Image(読み込み中もそのまま入れる)
+const charImageMissing = new Set();   // 404だったもの。二度と要求しない
+function charImage(name) {
+  if (!name || charImageMissing.has(name)) return null;
+  let img = charImages.get(name);
+  if (!img) {
+    img = new Image();
+    img.onerror = () => { charImageMissing.add(name); charImages.delete(name); };
+    img.src = `images/characters/${name}.png`;
+    charImages.set(name, img);
+  }
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+
+// この石がいま出すべき画像名を決める。無ければnull(=絵文字で描く)。
+function pieceImageName(p) {
+  if (p.role === "enemy") {
+    // 敵は1枚だけ。回転もヒットも差し替えない(素材を絞っているため)
+    if (p.enemyId === "mui") return "27_normal_b";
+    const no = ENEMY_IMAGE_NO[p.enemyId];
+    if (!no) return null;
+    if (p.enemyId === "greed") return p.ginaForm === "mami" ? "24_normal_b" : "24_normal";
+    return `${no}_normal`;
+  }
+  const no = CHAR_IMAGE_NO[p.characterId];
+  if (!no) return null;
+  // ぶつかった直後だけヒット顔。回転より優先する
+  if (p.hitFaceUntil && performance.now() < p.hitFaceUntil) return `${no}_hit`;
+  // 回転をかけているあいだは、向きに合わせて傾いた絵を使う。
+  // curveは衝突で符号が反転しうるので、毎フレーム現在の値から選ぶ。
+  if (p.curve) {
+    const dir = p.curve > 0 ? "spin_clockwise" : "spin_counterclockwise";
+    // ヒロイベオは合体すると額を出すので、回転絵も専用のものに差し替える
+    if (p.characterId === "hiroibeo" && p.evolved) return `${no}_${dir}_b`;
+    return `${no}_${dir}`;
+  }
+  return p.evolved ? `${no}_excited` : `${no}_normal`;
+}
+
+// キャラ画像を1体ぶん描く。rはボール(当たり判定)の半径。
+// dimOutside=true のとき、ボールの円からはみ出した部分だけ薄くする(狙い中のガイド)。
+function drawCharacterImage(img, r, rot, dimOutside) {
+  const size = (r * 2) / CHAR_IMAGE_RATIO;
+  if (dimOutside) {
+    ctx.save();
+    ctx.globalAlpha *= CONFIG.AIM_OUTSIDE_ALPHA;
+    ctx.rotate(rot);
+    ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    ctx.restore();
+    // 円の内側だけ、もう一度そのままの濃さで重ねる
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.rotate(rot);
+    ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    ctx.restore();
+    return;
+  }
+  ctx.save();
+  ctx.rotate(rot);
+  ctx.drawImage(img, -size / 2, -size / 2, size, size);
+  ctx.restore();
+}
+
+function drawPiece(x, y, r, color, rot, alpha, partType = null, icon = null, enemyStyle = false, imageName = null, dimOutside = false) {
+  const img = charImage(imageName);
+  if (img) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    drawCharacterImage(img, r, rot, dimOutside);
+    ctx.restore();
+    return;
+  }
+  drawPieceEmoji(x, y, r, color, rot, alpha, partType, icon, enemyStyle);
+}
+
+function drawPieceEmoji(x, y, r, color, rot, alpha, partType = null, icon = null, enemyStyle = false) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y);
