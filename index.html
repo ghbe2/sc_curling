@@ -2479,15 +2479,8 @@ function physicsStep() {
     for (const p of game.pieces) {
       if (p.state !== "onboard") continue;
       const speed = Math.hypot(p.vx, p.vy);
-      if (speed < CONFIG.SETTLE_SPEED) {
-        p.vx = 0; p.vy = 0;
-        // 止まったら通常の顔に戻すので、傾いたままだと不自然。少しずつ正立へ戻す。
-        if (p.rot) {
-          const wrapped = ((p.rot + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-          p.rot = Math.abs(wrapped) < 0.012 ? 0 : wrapped * 0.86;
-        }
-        continue;
-      }
+      // 止まった石は、そのとき向いていた角度のまま置いておく(正立へは戻さない)
+      if (speed < CONFIG.SETTLE_SPEED) { p.vx = 0; p.vy = 0; continue; }
 
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
       // curveSpeedEase<1 は速度による曲がり抑制を弱める(=速いショットでも曲がる。アウネ)
