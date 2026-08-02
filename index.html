@@ -791,10 +791,9 @@ const CONFIG = {
   ENEMY_START_COUNT: 3,     // 敵の初期解禁数=初期配置数(どの3種になるかは毎ゲームのシャッフルで決まる)
   ENEMY_UNLOCK_EVERY: 10,   // 敵は何ターンごとに増えるか
   ENEMY_UNLOCK_STEP: 1,     // 敵は1回に何種増えるか(10ターンごとに1種)
-  SCORE_WAVE_CLEAR: 1000,
   LOSE_RADIUS: 34,       // 敵が停止すると敗北になる中心範囲
   SCORE_TURN: 0,         // 生存ターンの加点は廃止(0)。スコアはテイクとトリックで稼ぐ
-  SCORE_TAKEOUT: 100,    // 敵を1体テイクアウトしたときの得点
+  SCORE_TAKEOUT: 50,     // 敵を1体テイクアウトしたときの得点(100→50。伸びすぎ抑制)
   // ランクはスコアで達成する。到達した最大のものを表示する
   SCORE_RANKS: [
     { score: 0,     name: "ぴよぴよタイム",     icon: "🌱" },
@@ -1043,7 +1042,6 @@ const game = {
   turnAlertLevel: "none",
   score: {
     enemyTakeouts: 0,
-    waveBonus: 0,
     characterBonus: 0,
     trickBonus: 0,
     throughPenalty: 0,
@@ -1075,20 +1073,23 @@ const ENEMIES = [
 // group を共有するトリックどうしは競合し、いちばん強い1件だけが成立する。
 // group が違えば同時に成立してよい(例:トリプルテイク+ヒットアンドロール)。
 // rank は同じ group の中での強さ。
+// 点はスコアが伸びすぎないよう、テイクとトリックをまとめて半分にした。
+// ブランクだけは据え置きで、飛び抜けた目標として残す。
 const TRICKS = [
-  { id: "takeout",    group: "take",  rank: 1, label: "ていくあうとっ！",       name: "テイクアウト",       score: 50,   desc: "敵を ハウスの外へ 出す。" },
-  { id: "double",     group: "take",  rank: 2, label: "だぶるていくっ!!",       name: "ダブルテイク",       score: 200,  desc: "1回で 敵を 2体 ハウスの外へ。" },
-  { id: "triple",     group: "take",  rank: 3, label: "とりぷるていくっ!!!",    name: "トリプルテイク",     score: 500,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
-  { id: "hitAndStay", group: "after", rank: 1, label: "ひっと・あんど・すてい！", name: "ヒットアンドステイ", score: 300,  desc: "敵を ハウスの外へ 出して、投げた キャラは その場に 残る。" },
-  { id: "hitAndRoll", group: "after", rank: 1, label: "ひっと・あんど・ろーるっ！", name: "ヒットアンドロール", score: 200, desc: "敵を ハウスの外へ 出して、投げた キャラは 少しだけ 動く。" },
-  { id: "runback",    group: "after", rank: 2, label: "らんばっくっ！",         name: "ランバック",         score: 500,  desc: "手前の なかまを ぶつけて テイクし、その なかまを ハウスに 残す。" },
-  { id: "peel",       group: "after", rank: 1, label: "ぴーるっ！",             name: "ピール",             score: 150,  desc: "敵を ハウスの外へ 出して、投げた キャラも プレイエリアの外へ。" },
-  { id: "tee",        group: "draw",  rank: 1, label: "てぃーしょっとっ！",     name: "ティーショット",     score: 200,  desc: "投げた キャラを ボタンの上に 止める。" },
-  { id: "comeAround", group: "draw",  rank: 2, label: "かむ・あらうんどっ！",   name: "カム・アラウンド",   score: 500,  desc: "ガードを よけて ボタンの上に 止める。" },
-  { id: "rollIn",     group: "rollIn",rank: 1, label: "ろーるいんっ！",         name: "ロールイン",         score: 250,  desc: "ハウスの外の なかまを 動かして ハウスに 入れる。" },
-  { id: "freeze",     group: "freeze",rank: 1, label: "ふりーずっ！",           name: "フリーズショット",   score: 250,  desc: "敵を 出さずに、その すぐ手前で ぴたりと 止める。" },
-  { id: "port",       group: "port",  rank: 1, label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 500,  desc: "キャラの すきまを 当たらずに 通す。" },
-  { id: "through",    group: "miss",  rank: 1, label: "するー…",               name: "スルー",             score: -120, desc: "何にも 当たらず ハウスにも 残らない。(減点)" },
+  { id: "blank",      group: "blank", rank: 1, label: "ぶらんくっ！",           name: "ブランク",           score: 1000, desc: "敵を ぜんぶ ハウスの外へ 出す。" },
+  { id: "takeout",    group: "take",  rank: 1, label: "ていくあうとっ！",       name: "テイクアウト",       score: 25,   desc: "敵を ハウスの外へ 出す。" },
+  { id: "double",     group: "take",  rank: 2, label: "だぶるていくっ!!",       name: "ダブルテイク",       score: 100,  desc: "1回で 敵を 2体 ハウスの外へ。" },
+  { id: "triple",     group: "take",  rank: 3, label: "とりぷるていくっ!!!",    name: "トリプルテイク",     score: 250,  desc: "1回で 敵を 3体いじょう ハウスの外へ。" },
+  { id: "hitAndStay", group: "after", rank: 1, label: "ひっと・あんど・すてい！", name: "ヒットアンドステイ", score: 150,  desc: "敵を ハウスの外へ 出して、投げた キャラは その場に 残る。" },
+  { id: "hitAndRoll", group: "after", rank: 1, label: "ひっと・あんど・ろーるっ！", name: "ヒットアンドロール", score: 100, desc: "敵を ハウスの外へ 出して、投げた キャラは 少しだけ 動く。" },
+  { id: "runback",    group: "after", rank: 2, label: "らんばっくっ！",         name: "ランバック",         score: 250,  desc: "手前の なかまを ぶつけて テイクし、その なかまを ハウスに 残す。" },
+  { id: "peel",       group: "after", rank: 1, label: "ぴーるっ！",             name: "ピール",             score: 75,   desc: "敵を ハウスの外へ 出して、投げた キャラも プレイエリアの外へ。" },
+  { id: "tee",        group: "draw",  rank: 1, label: "てぃーしょっとっ！",     name: "ティーショット",     score: 100,  desc: "投げた キャラを ボタンの上に 止める。" },
+  { id: "comeAround", group: "draw",  rank: 2, label: "かむ・あらうんどっ！",   name: "カム・アラウンド",   score: 250,  desc: "ガードを よけて ボタンの上に 止める。" },
+  { id: "rollIn",     group: "rollIn",rank: 1, label: "ろーるいんっ！",         name: "ロールイン",         score: 125,  desc: "ハウスの外の なかまを 動かして ハウスに 入れる。" },
+  { id: "freeze",     group: "freeze",rank: 1, label: "ふりーずっ！",           name: "フリーズショット",   score: 125,  desc: "敵を 出さずに、その すぐ手前で ぴたりと 止める。" },
+  { id: "port",       group: "port",  rank: 1, label: "するー・ざ・ぽーとっ！", name: "スルー・ザ・ポート", score: 250,  desc: "キャラの すきまを 当たらずに 通す。" },
+  { id: "through",    group: "miss",  rank: 1, label: "するー…",               name: "スルー",             score: -300, desc: "何にも 当たらず プレイエリアの外へ。(減点)" },
 ];
 const TRICK_BY_ID = Object.fromEntries(TRICKS.map(t => [t.id, t]));
 
@@ -1758,7 +1759,6 @@ function buildSurvivalGame() {
   game.buttonDanger = false;
   game.turnAlertLevel = "none";
   game.score.enemyTakeouts = 0;
-  game.score.waveBonus = 0;
   game.score.characterBonus = 0;
   game.score.trickBonus = 0;
   game.score.throughPenalty = 0;
@@ -2618,10 +2618,11 @@ function startEnemyAdvance() {
   game.enemyAbilityContacts = new Set();
   let enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
   if (enemies.length === 0) {
-    game.score.waveBonus += CONFIG.SCORE_WAVE_CLEAR;
+    // ブランクもトリックと同じ経路で加点する。マユゥの倍率も乗り、
+    // ゲームオーバーの内訳やトリック一覧にも並ぶ。
+    awardTrick("blank");
     game.wave++;
     spawnEnemyWave();
-    showScoreEvent("ぶらんくっ！");
     enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard");
     // ブランクで盤がなかまだらけのまま次の波に入ると場所が足りず作業ゲーになるため、
     // 新しく出てきた敵と同じ数だけ、外側にいる(=役に立ちにくい)なかまを退場させる。
@@ -4053,10 +4054,10 @@ function render() {
       if (p.role === "enemy") {
         // 敵だけ、狙っているあいだにうっすら暗い縁を出す。なかまには何も付けないので、
         // 「縁があるか無いか」だけで敵味方が分かる
-        if (aiming) aura = { color: "24,12,30", peak: 0.42 };
+        if (aiming) aura = { color: "24,12,30", peak: 0.62 };
       } else if (p.evolved) {
         // 合体済みの目印。常に出すが、気づく程度にとどめる
-        aura = { color: "255,196,40", peak: 0.6 };
+        aura = { color: "255,190,30", peak: 0.85 };
       }
       if (aura) {
         // 顔の縁に沿った2pxほどの細い線。にじませると太く見えるので、
@@ -4326,12 +4327,11 @@ function calculateScore() {
   const survival = survivedTurns * CONFIG.SCORE_TURN;
   const takeout = game.score.enemyTakeouts * CONFIG.SCORE_TAKEOUT;
   const board = calculateBoardControl();
-  const waveBonus = game.score.waveBonus;
   const characterBonus = game.score.characterBonus;
   const trickBonus = game.score.trickBonus ?? 0;          // トリック成立のボーナス
   const throughPenalty = game.score.throughPenalty ?? 0;  // スルーの減点(合計は0未満にしない)
-  const total = Math.max(0, survival + takeout + board + waveBonus + characterBonus + trickBonus - throughPenalty);
-  return { survivedTurns, survival, takeout, board, waveBonus, characterBonus, trickBonus, throughPenalty, total };
+  const total = Math.max(0, survival + takeout + board + characterBonus + trickBonus - throughPenalty);
+  return { survivedTurns, survival, takeout, board, characterBonus, trickBonus, throughPenalty, total };
 }
 
 function updateDangerAlert() {
@@ -4358,7 +4358,7 @@ function updateHUD() {
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
   const score = calculateScore();
   updateDangerAlert();
-  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.waveBonus + "|" + score.characterBonus + "|" + score.trickBonus + "|" + score.throughPenalty;
+  const s = onboard + "|" + enemies + "|" + game.turn + "|" + game.wave + "|" + game.phase + "|" + game.score.enemyTakeouts + "|" + score.board + "|" + score.characterBonus + "|" + score.trickBonus + "|" + score.throughPenalty;
   if (s === lastHUD) return;
   lastHUD = s;
   document.getElementById("totalScoreText").textContent = score.total;
@@ -4941,15 +4941,23 @@ function introAllNames() {
 // 速さも大きさも出るタイミングもばらつかせて、規則的に見えないようにする。
 function makeIntroSlider(w, h, startOffscreen) {
   const dir = Math.random() < 0.5 ? 1 : -1;          // 1=右へ、-1=左へ
-  const names = introAllNames();
-  const base = names[Math.floor(Math.random() * names.length)];
-  // 回転の向きは進む向きに合わせる(ゲーム中と同じ見え方にする)
-  const spun = base.replace("_normal", dir > 0 ? "_spin_clockwise" : "_spin_counterclockwise");
+  // ふだんは普通の顔。12体に1体くらいの割合でヒットか合体の顔が混ざる。
+  // 敵は普通の顔しか用意していないので、混ぜるときは味方から選ぶ。
+  let name;
+  if (Math.random() < 1 / 12) {
+    const allyNos = Object.values(CHAR_IMAGE_NO);
+    const no = allyNos[Math.floor(Math.random() * allyNos.length)];
+    name = `${no}_${Math.random() < 0.5 ? "hit" : "excited"}`;
+  } else {
+    const names = introAllNames();
+    name = names[Math.floor(Math.random() * names.length)];
+  }
+  const base = name;
   const r = h * (0.026 + Math.random() * 0.032);
   const speed = 1.4 + Math.random() * 2.4;
   const margin = r * 2.4;
   return {
-    name: charImage(spun) ? spun : base,
+    name: charImage(name) ? name : base,
     r,
     x: startOffscreen ? (dir > 0 ? -margin : w + margin) : Math.random() * w,
     y: h * (0.05 + Math.random() * 0.9),
@@ -5071,10 +5079,11 @@ function bindIntro() {
   const intro = document.getElementById("intro");
   if (!intro) return;
   // イントロで使う絵を先に読ませておく(流れ始めてから慌てて読まない)
-  for (const n of introAllNames()) {
-    charImage(n);
-    charImage(n.replace("_normal", "_spin_clockwise"));
-    charImage(n.replace("_normal", "_spin_counterclockwise"));
+  for (const n of introAllNames()) charImage(n);
+  // たまに混ざる顔も先に読ませておく。敵には用意がないので味方だけ。
+  for (const no of Object.values(CHAR_IMAGE_NO)) {
+    charImage(`${no}_hit`);
+    charImage(`${no}_excited`);
   }
   startIntroAnim();
   document.getElementById("introStartBtn")?.addEventListener("click", (e) => {
