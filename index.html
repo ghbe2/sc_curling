@@ -1549,13 +1549,18 @@ function enemyAbilitySuppressed(enemy) {
 
 // バーニは「触れた相手の能力を無視する」。リウ(近くの敵だけを封印)との差別化のため、
 // 敵だけでなく、なかまの能力(ベルペットの飛びづらさなど)も無視する。
-// ただし効くのは自分が投げられているあいだだけ。盤に止まっているバーニが何かに
-// 弾かれて当たった場合は、ふつうに相手の能力を受ける。
-// (バーニ進化に飛ばされた石が受け継ぐぶん inheritsIgnoreAbilities は投球でなくても効く)
+// 効くのは「自分の投球で動いているあいだ」だけ:
+//   ・投げられた本人(isCurrentShot)
+//   ・その投球に弾かれて飛んでいる最中(indirectFromShot)
+// 敵の接近で押されているときや、止まっているところに触られたときは効かない。
+// indirectFromShot は投球のたびに全員リセットされ、敵の接近では付かないので、
+// この2つを見れば「飛ばされていく自分」だけを拾える。
+// バーニ進化が飛ばした別キャラは inheritsIgnoreAbilities を受け継いで無敵になる。
 function barniBypassesEnemy(attacker, target) {
   if (attacker?.role !== "player" || !target) return false;
   if (attacker.inheritsIgnoreAbilities) return true;
-  return Boolean(attacker.mods.ignoreEnemyAbilities && attacker.isCurrentShot);
+  if (!attacker.mods.ignoreEnemyAbilities) return false;
+  return Boolean(attacker.isCurrentShot || attacker.indirectFromShot);
 }
 
 function applyEnemyContactAbilities(a, b) {
