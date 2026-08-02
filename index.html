@@ -4048,31 +4048,26 @@ function render() {
     // 合体済みだけは常に出すが、分かる程度の控えめな光にとどめる。
     // シェア画像を作るあいだは出さない。
     if (p.state === "onboard" && !game.hideRings) {
-      const ART = 1 / CHAR_IMAGE_RATIO;   // 1.6
       const aiming = game.aim !== null;
       let aura = null;
       if (p.role === "enemy") {
-        // 敵だけ、狙っているあいだにほんのり暗く縁取る。なかまには何も付けないので、
-        // 「影があるか無いか」だけで敵味方が分かる
-        if (aiming) aura = { color: "24,12,30", peak: 0.24, size: 1.72 };
+        // 敵だけ、狙っているあいだにうっすら暗い縁を出す。なかまには何も付けないので、
+        // 「縁があるか無いか」だけで敵味方が分かる
+        if (aiming) aura = { color: "24,12,30", peak: 0.42 };
       } else if (p.evolved) {
-        // 合体済みの目印。こちらは常に出すが、気づく程度にとどめる
-        aura = { color: "255,205,60", peak: 0.34, size: 1.72 };
+        // 合体済みの目印。常に出すが、気づく程度にとどめる
+        aura = { color: "255,196,40", peak: 0.6 };
       }
       if (aura) {
-        const auraR = r * aura.size;
-        // 絵の縁(1.6r)のすぐ内側から始めて、すぐ消える細い縁取りにする。
-        // 内側から広く敷くと、絵の透明な隙間からにじみ出て太く見えてしまう。
-        const grad = ctx.createRadialGradient(drawX, drawY, r * ART * 0.97, drawX, drawY, auraR);
-        grad.addColorStop(0, `rgba(${aura.color},${aura.peak})`);
-        grad.addColorStop(0.45, `rgba(${aura.color},${aura.peak * 0.42})`);
-        grad.addColorStop(1, `rgba(${aura.color},0)`);
+        // 顔の縁に沿った2pxほどの細い線。にじませると太く見えるので、
+        // ぼかさずに輪郭のすぐ外へ一本だけ引く。目立たせる必要はない。
         ctx.save();
-        ctx.globalAlpha = alpha;
+        ctx.globalAlpha = alpha * aura.peak;
         ctx.beginPath();
-        ctx.arc(drawX, drawY, auraR, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
+        ctx.arc(drawX, drawY, r + 1.5, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgb(${aura.color})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.restore();
       }
     }
