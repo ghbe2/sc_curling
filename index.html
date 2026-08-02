@@ -38,6 +38,14 @@
     position: fixed; top: 6px; right: 6px; z-index: 4;
     display: grid; grid-template-columns: repeat(2, 68px); gap: 4px;
   }
+  /* 「あきらめる」は誤爆すると取り返しがつかないので、他より落ち着いた色にして
+     2列ぶんの幅で下段に置く(押し間違いを減らす) */
+  #giveUpBtn {
+    grid-column: 1 / -1;
+    background: linear-gradient(180deg, #cfc0c8 0%, #a8949f 100%);
+    box-shadow: 0 2px 0 #8d7a85, 0 3px 9px rgba(90,70,80,0.2);
+  }
+  #giveUpBtn.hidden { display: none; }
   #scenarioBar .btn {
     height: 25px; padding: 0 3px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
@@ -603,6 +611,7 @@
   <button class="btn" id="trickBookBtn">トリック</button>
   <button class="btn" id="characterBookBtn">キャラクター</button>
   <button class="btn" id="soundToggleBtn" aria-pressed="true">サウンド ON</button>
+  <button class="btn" id="giveUpBtn">あきらめる</button>
 </div>
 <!-- デバッグ用。最終的には削除する -->
 <button class="btn" id="allOutBtn" aria-pressed="false">デバッグ OFF</button>
@@ -680,9 +689,10 @@
 const CONFIG = {
   BOARD_RADIUS: 320,
   OUT_RADIUS: 520,       // 旧盤面の外では消さず、画面外へ大きく飛んだときだけ退場
-  // キャラを小さくし(36→27)、ハウスを広げる(230→250)。実カーリングはボタンと石がほぼ同じ大きさで、
-  // 従来はキャラが大きすぎて盤が詰まり膠着しやすかった。従来の36は、デロルスに1.35倍された姿にあたる。
-  HOUSE_RADIUS: 250,     // 石の物理・飛距離には影響しない、見た目とスコア判定の値。
+  // キャラを小さくした(36→27)。従来の36は、デロルスに1.35倍された姿にあたる。
+  // ハウスは一度250へ広げたが、キャラが小さくなったぶんで既に難易度が下がっており、
+  // 広げると過剰かつ実カーリングの比率からも離れるため230へ戻した。
+  HOUSE_RADIUS: 230,     // 石の物理・飛距離には影響しない、見た目とスコア判定の値。
                           // 実カーリングの比率(12/8/4/1フィート)に合わせて内側の白・赤・ボタンを
                           // HOUSE_RADIUS×2/3, ×1/3, ×1/12で描画する。物理には一切影響しない見た目のみの値
   GRID_SPACING: 40,      // 新設(PROTO23、デバッグ表示用):盤面に重ねる格子ガイドの間隔(px)。
@@ -848,8 +858,8 @@ const CONFIG = {
                           // 再計測して最弱がMIN_THROW_TARGET_R(276)で止まるよう補正(検証:r=277)。
                           // 引き継ぎ再計測:65.35→47.5。GPTが追加した転がり抵抗(ROLLING_RESISTANCE)で
                           // 同じ初速でも走行距離が短くなったため実測し直した(FRICTION/抵抗変更時は要再計測)
-  // ハウスを250へ広げたので、最弱が止まる位置も外へずらす(ハウスの外・盤縁320の内側)
-  MIN_THROW_TARGET_R: 290, // 最弱パワー・直進投球を止めたい盤中心からの半径(px)。276→290。
+  // ハウスを230へ戻したので、最弱が止まる位置も元に戻す(ハウスの外・盤縁320の内側)
+  MIN_THROW_TARGET_R: 276, // 最弱パワー・直進投球を止めたい盤中心からの半径(px)。
                           // ハウス半径が195に拡大した現行では、最弱(0%)がハウスに届かない=r>195で止まるべき。
                           // r=276(盤縁320の内側・ハウス手前)で最弱ガードになるようDから初速を逆算(≒14.8)。
                           // --- 旧コメント(値の履歴) --- 160→210(PROTO23):
@@ -978,7 +988,7 @@ const ENEMIES = [
   { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "速く 近づき まわりを 弾く。" },
   { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "じかに あてても 飛びにくい。飛ばした キャラなら 飛ぶ。" },
   { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "毎ターン 姿が 変わる。ジーナは 敵に、マミは なかまに 飛ばされにくい。" },
-  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "あたった あいてを 大きく 飛びにくく する。" },
+  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "あたった 敵を 大きく 飛びにくく する。" },
 ];
 
 // トリック(ショットの呼称)の一覧。表示・採点・一覧パネルをこの定義だけで賄う。
@@ -1013,7 +1023,7 @@ const CHARACTERS = [
   { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。",
     mods: { knockResist: 0.22 } },
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "なかまに あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
-  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてた あいての 能力を 無視。敵にも なかまにも。", mods: { ignoreEnemyAbilities: true } },
+  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "投げたとき、あてた あいての 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
   // pathCurveMult 1.75→1.25:最大ベンド(弱いフリック)だと盤外まで曲がって出てしまい
   // 「操作できずに止まる」との報告があったため抑制。速いショットで曲がる特徴(curveSpeedEase)は維持
@@ -1522,20 +1532,30 @@ function flashEnemyAbility(piece, color = "#ffe36e") {
   playUiPopSound(420, 0.05);
 }
 
+// 効果範囲は、小さくされたぶんだけ狭まる。大きくされても広がらない
+// (エノに縮められたら効きが弱まる、デロルスに膨らまされても得はしない)。
+function abilityRangeScale(piece) {
+  return Math.min(1, piece.mods.radiusScale ?? 1);
+}
+
 function enemyAbilitySuppressed(enemy) {
   if (!enemy || enemy.role !== "enemy") return false;
   return game.pieces.some(piece =>
     piece.role === "player" && piece.state === "onboard" && piece.mods.silenceEnemyAbilities &&
-    Math.hypot(piece.x - enemy.x, piece.y - enemy.y) <= CONFIG.RIU_SILENCE_RADIUS * piece.mods.silenceRadiusMult
+    Math.hypot(piece.x - enemy.x, piece.y - enemy.y)
+      <= CONFIG.RIU_SILENCE_RADIUS * piece.mods.silenceRadiusMult * abilityRangeScale(piece)
   );
 }
 
 // バーニは「触れた相手の能力を無視する」。リウ(近くの敵だけを封印)との差別化のため、
 // 敵だけでなく、なかまの能力(ベルペットの飛びづらさなど)も無視する。
+// ただし効くのは自分が投げられているあいだだけ。盤に止まっているバーニが何かに
+// 弾かれて当たった場合は、ふつうに相手の能力を受ける。
+// (バーニ進化に飛ばされた石が受け継ぐぶん inheritsIgnoreAbilities は投球でなくても効く)
 function barniBypassesEnemy(attacker, target) {
   if (attacker?.role !== "player" || !target) return false;
-  // バーニ本体、またはバーニ進化に弾かれてレイズテイクに向かう石(inheritsIgnoreAbilities)
-  return Boolean(attacker.mods.ignoreEnemyAbilities || attacker.inheritsIgnoreAbilities);
+  if (attacker.inheritsIgnoreAbilities) return true;
+  return Boolean(attacker.mods.ignoreEnemyAbilities && attacker.isCurrentShot);
 }
 
 function applyEnemyContactAbilities(a, b) {
@@ -1566,8 +1586,8 @@ function applyEnemyContactAbilities(a, b) {
         playUiPopSound(310, 0.04);
       });
     }
-    // デロルスは相手を選ばない。敵もなかまも大きく重くして、飛ばしにくくする。
-    if (enemy.enemyId === "gluttony" && other.uid !== enemy.uid && !other.enlargedByDellorath) {
+    // デロルスが大きくするのは敵だけ。なかままで膨らむと盤が見づらくなるため。
+    if (enemy.enemyId === "gluttony" && other.role === "enemy" && other.uid !== enemy.uid && !other.enlargedByDellorath) {
       activateOnce(`dellorath:${enemy.uid}`, () => {
         other.enlargedByDellorath = true;
         other.mods.radiusScale = Math.min(1.7, other.mods.radiusScale * 1.35);
@@ -1662,6 +1682,7 @@ function buildSurvivalGame() {
   game.score.trickCounts = {};
   game.score.characterUses = {};
   game.scoreSubmitted = false; // 新しいゲームなので、また送れるようにする
+  document.getElementById("giveUpBtn")?.classList.remove("hidden");
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.hitStopFrames = 0;
   game.fxRings = [];
@@ -2287,7 +2308,7 @@ function topCharacterId() {
  * Content-Typeを text/plain にしているのは、application/json だと事前確認(preflight)が
  * 走ってGAS側で弾かれるため。中身はJSON文字列で、GAS側は postData.contents をparseする。
  */
-const RANKING_ENDPOINT = "";   // 例: https://script.google.com/macros/s/AKfy.../exec
+const RANKING_ENDPOINT = "https://script.google.com/macros/s/AKfycbxO0oE0hMxUgFRR7QiJg7cVlz6NBReu2zFbqVINne8NuGa1P6jNZIDQFnkrpwc7_S8mXw/exec";
 const PLAYER_NAME_KEY = "sugake-curling.playerName";
 const GAME_VERSION = "2026-08-02";
 
@@ -2402,7 +2423,16 @@ function prepareShareImage(score, rank) {
 
 function buildShareImageNow(score, rank) {
   let out;
-  try { out = buildShareCanvas(score, rank); } catch (_) { return; }
+  try {
+    // 輪を消した状態で描き直してから切り出す(シェア画像には盤の様子だけを載せる)
+    game.hideRings = true;
+    render();
+    out = buildShareCanvas(score, rank);
+  } catch (_) {
+    return;
+  } finally {
+    game.hideRings = false;
+  }
   out.toBlob((blob) => {
     if (!blob) return;
     shareImageBlob = blob;
@@ -2499,6 +2529,7 @@ function showGameOver(enemy) {
       : `<div style="font-size:11px;opacity:0.65;margin-top:8px;">トリックは まだ 出ていない</div>`) +
     topHtml + bestHtml;
   document.getElementById("gameOver").classList.add("show");
+  document.getElementById("giveUpBtn")?.classList.add("hidden");
   updateRankingBox(score, rank);
   // 盤面がまだ描かれているうちにシェア画像を用意する(共有はタップ直後に呼ぶ必要があるため)
   prepareShareImage(score, rank);
@@ -2542,7 +2573,8 @@ function startEnemyAdvance() {
     const speed = baseSpeed * (enemy === pressureEnemy ? CONFIG.ENEMY_PRESSURE_MULT : 1) * abilityMoveMult;
     let dirX = -enemy.x / distance;
     let dirY = -enemy.y / distance;
-    const localAttractors = attractors.filter(piece => Math.hypot(piece.x - enemy.x, piece.y - enemy.y) <= CONFIG.HIROIBEO_RANGE * piece.mods.attractRangeMult);
+    const localAttractors = attractors.filter(piece => Math.hypot(piece.x - enemy.x, piece.y - enemy.y)
+      <= CONFIG.HIROIBEO_RANGE * piece.mods.attractRangeMult * abilityRangeScale(piece));
     if (localAttractors.length > 0) {
       const target = localAttractors.reduce((nearest, piece) =>
         Math.hypot(piece.x - enemy.x, piece.y - enemy.y) < Math.hypot(nearest.x - enemy.x, nearest.y - enemy.y)
@@ -3840,8 +3872,9 @@ function render() {
   for (const p of game.pieces) {
     if (p.role !== "player" || p.state !== "onboard") continue;
     const s = toScreen(p.x, p.y);
-    const radius = p.mods.silenceEnemyAbilities ? CONFIG.RIU_SILENCE_RADIUS * p.mods.silenceRadiusMult
-      : (p.mods.enemyAttractor ? CONFIG.HIROIBEO_RANGE * p.mods.attractRangeMult : 0);
+    const radius = (p.mods.silenceEnemyAbilities ? CONFIG.RIU_SILENCE_RADIUS * p.mods.silenceRadiusMult
+      : (p.mods.enemyAttractor ? CONFIG.HIROIBEO_RANGE * p.mods.attractRangeMult : 0))
+      * abilityRangeScale(p);
     if (!radius) continue;
     ctx.beginPath();
     ctx.arc(s.x, s.y, radius * view.scale, 0, Math.PI * 2);
@@ -3914,8 +3947,9 @@ function render() {
       ctx.restore();
     }
     // 足元の輪。敵味方をひと目で見分けられるように、全員に色違いで付ける。
-    // なかま=桃、なかま(合体)=金、敵=青緑。当たり判定の大きさとも一致する。
-    if (p.state === "onboard") {
+    // なかま=桃、なかま(合体)=金、敵=青緑。半径は当たり判定ちょうどに合わせる。
+    // シェア画像を作るあいだは出さない(盤の様子だけを見せたいため)。
+    if (p.state === "onboard" && !game.hideRings) {
       const ringStyle = p.role === "enemy"
         ? { color: "rgba(64,214,224,0.9)", glow: "rgba(64,214,224,0.28)" }
         : p.evolved
@@ -3925,11 +3959,11 @@ function render() {
       ctx.globalAlpha = alpha;
       // 内側にうっすら敷いて、絵と重なっても輪が沈まないようにする
       ctx.beginPath();
-      ctx.arc(drawX, drawY, r * 1.14, 0, Math.PI * 2);
+      ctx.arc(drawX, drawY, r, 0, Math.PI * 2);
       ctx.fillStyle = ringStyle.glow;
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(drawX, drawY, r * 1.14, 0, Math.PI * 2);
+      ctx.arc(drawX, drawY, r, 0, Math.PI * 2);
       ctx.strokeStyle = ringStyle.color;
       ctx.lineWidth = Math.max(2, r * 0.1);
       ctx.stroke();
@@ -4323,6 +4357,28 @@ function bindResetButtons() {
   document.getElementById("shareBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     shareScore();
+  });
+  // 途中でやめる。取り返しがつかないので一度だけ確認する。
+  // やめてもそこまでのスコアは有効(ランキングにも送る)。
+  const giveUp = document.getElementById("giveUpBtn");
+  let giveUpArmed = false;
+  let giveUpTimer = null;
+  giveUp?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (game.gameOver) return;
+    if (!giveUpArmed) {
+      giveUpArmed = true;
+      giveUp.textContent = "ほんとに？";
+      giveUpTimer = window.setTimeout(() => {
+        giveUpArmed = false;
+        giveUp.textContent = "あきらめる";
+      }, 2600);
+      return;
+    }
+    window.clearTimeout(giveUpTimer);
+    giveUpArmed = false;
+    giveUp.textContent = "あきらめる";
+    showGameOver(null);
   });
   // ニックネームを決めたら、その回の結果からすぐ送る
   document.getElementById("rankingJoinBtn")?.addEventListener("click", (e) => {
