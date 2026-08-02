@@ -3874,15 +3874,17 @@ function render() {
       : (p.mods.enemyAttractor ? CONFIG.HIROIBEO_RANGE * p.mods.attractRangeMult : 0))
       * abilityRangeScale(p);
     if (!radius) continue;
+    // 破線の縁取りはやめ、外へ向かってふんわり消える色だけで範囲を示す
+    const rr = radius * view.scale;
+    const silence = p.mods.silenceEnemyAbilities;
+    const grad = ctx.createRadialGradient(s.x, s.y, rr * 0.25, s.x, s.y, rr);
+    grad.addColorStop(0, silence ? "rgba(80,190,220,0.16)" : "rgba(255,120,175,0.15)");
+    grad.addColorStop(0.72, silence ? "rgba(80,190,220,0.09)" : "rgba(255,120,175,0.08)");
+    grad.addColorStop(1, silence ? "rgba(80,190,220,0)" : "rgba(255,120,175,0)");
     ctx.beginPath();
-    ctx.arc(s.x, s.y, radius * view.scale, 0, Math.PI * 2);
-    ctx.fillStyle = p.mods.silenceEnemyAbilities ? "rgba(80,190,220,.055)" : "rgba(255,120,175,.045)";
+    ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
     ctx.fill();
-    ctx.setLineDash([5, 7]);
-    ctx.strokeStyle = p.mods.silenceEnemyAbilities ? "rgba(45,145,190,.34)" : "rgba(233,30,99,.25)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.setLineDash([]);
   }
   for (const ring of game.fxRings) {
     const t = clamp(ring.age / ring.life, 0, 1);
@@ -3944,27 +3946,30 @@ function render() {
       ctx.fill();
       ctx.restore();
     }
-    // 足元の輪。敵味方をひと目で見分けられるように、全員に色違いで付ける。
-    // なかま=桃、なかま(合体)=金、敵=青緑。半径は当たり判定ちょうどに合わせる。
+    // 足元のオーラ。輪郭の線ではなく、絵の下からにじませて敵味方を見分ける。
+    // 敵=黒い影、なかま(合体)=金色に光る、なかま=淡い桃。
+    // 狙っているあいだは絵の外側が薄くなるので、オーラは薄めずに出して見分けを残す。
     // シェア画像を作るあいだは出さない(盤の様子だけを見せたいため)。
     if (p.state === "onboard" && !game.hideRings) {
-      const ringStyle = p.role === "enemy"
-        ? { color: "rgba(64,214,224,0.9)", glow: "rgba(64,214,224,0.28)" }
+      // 絵は当たり判定の1.6倍まで描かれるので、オーラはその外側まで広げないと隠れてしまう。
+      // 絵の縁(1.6r)から外へ向かってにじませる。
+      const ART = 1 / CHAR_IMAGE_RATIO;   // 1.6
+      const aura = p.role === "enemy"
+        ? { color: "24,12,30", peak: 0.56, size: 2.3 }
         : p.evolved
-          ? { color: "rgba(255,203,51,0.95)", glow: "rgba(255,203,51,0.32)" }
-          : { color: "rgba(255,120,175,0.9)", glow: "rgba(255,120,175,0.26)" };
+          ? { color: "255,205,60", peak: 0.95, size: 2.5 }
+          : { color: "255,130,185", peak: 0.5, size: 2.2 };
+      const auraR = r * aura.size;
+      const grad = ctx.createRadialGradient(drawX, drawY, r * ART * 0.72, drawX, drawY, auraR);
+      grad.addColorStop(0, `rgba(${aura.color},${aura.peak})`);
+      grad.addColorStop(0.62, `rgba(${aura.color},${aura.peak * 0.55})`);
+      grad.addColorStop(1, `rgba(${aura.color},0)`);
       ctx.save();
       ctx.globalAlpha = alpha;
-      // 内側にうっすら敷いて、絵と重なっても輪が沈まないようにする
       ctx.beginPath();
-      ctx.arc(drawX, drawY, r, 0, Math.PI * 2);
-      ctx.fillStyle = ringStyle.glow;
+      ctx.arc(drawX, drawY, auraR, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
       ctx.fill();
-      ctx.beginPath();
-      ctx.arc(drawX, drawY, r, 0, Math.PI * 2);
-      ctx.strokeStyle = ringStyle.color;
-      ctx.lineWidth = Math.max(2, r * 0.1);
-      ctx.stroke();
       ctx.restore();
     }
     // 狙っているあいだだけ、円からはみ出した絵を薄くする(案3)
