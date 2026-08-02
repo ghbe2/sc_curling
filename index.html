@@ -264,6 +264,11 @@
   }
   .gameOverTrickN { opacity: 0.7; }
   .gameOverTrickP { min-width: 52px; text-align: right; font-weight: 700; }
+  /* 自己ベスト。更新したときだけ色を変えて分かるようにする */
+  .gameOverBest { margin-top: 7px; font-size: 11px; opacity: 0.8; }
+  .gameOverBest.isNew { color: #ffe36e; opacity: 1; font-weight: 700; }
+  #gameOverButtons { display: flex; gap: 8px; justify-content: center; }
+  #shareBtn.busy { opacity: 0.6; pointer-events: none; }
   #sideInfo {
     position: fixed; left: 8px; top: 8px; z-index: 5;
     /* 縦に積むだけの入れ物。子は自分の幅で置き、長いトリック名が出ても
@@ -639,7 +644,7 @@
   </div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
-<div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><button class="btn" id="retryBtn">もう一度</button></div></div>
+<div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><div id="gameOverButtons"><button class="btn" id="shareBtn">シェア</button><button class="btn" id="retryBtn">もう一度</button></div></div></div>
 
 <script>
 "use strict";
@@ -712,7 +717,10 @@ const CONFIG = {
                           // 境界(0度で完全停止/100%移行、90度で無反応)は指数によらず変わらない。
                           // 90度に近いほぼ真横のかすりは物理的に「ほぼ無反応」が正しいため、
                           // そこだけは指数を上げても撃った側の残存を大きくは減らせない
-  LOW_SPEED_COLLISION_REF: 9,
+  // 9→5:レイズは「投球より遅くなったなかま」が2段目を当てるので、この減衰に
+  // 引っかかって必要以上に弱く感じていた。止まり際の微小接触を抑える目的は
+  // 残しつつ、狙って当てにいくレイズは通るようにする
+  LOW_SPEED_COLLISION_REF: 5,
   LOW_SPEED_COLLISION_MIN: 0.30,
   PIECE_RADIUS: 27,      // 36→27。従来の36はデロルスに1.35倍された姿にあたる(HOUSE_RADIUSのコメント参照)
   SETTLE_SPEED: 0.05,    // これ未満の速度になったら停止扱い(px/frame)
@@ -2233,6 +2241,106 @@ function enemyOnHouse() {
   );
 }
 
+/* =========================================================================
+ * 自己ベストとシェア
+ *  ・自己ベストは端末内(localStorage)に保存する。外部への送信はしない。
+ *  ・シェア画像は、盤面をそのまま切り出して下にスコアを添えた1枚を作る。
+ *    盤の上でキャラがごちゃごちゃしている様子が主役なので、UIは入れない。
+ * ========================================================================= */
+const BEST_SCORE_KEY = "sugake-curling.bestScore";
+function loadBestScore() {
+  try { return Number(localStorage.getItem(BEST_SCORE_KEY)) || 0; } catch (_) { return 0; }
+}
+function saveBestScore(score) {
+  try { localStorage.setItem(BEST_SCORE_KEY, String(score)); } catch (_) {}
+}
+
+let shareImageFile = null;   // ゲームオーバー時に作っておく(共有はタップ直後に呼ぶ必要があるため)
+let shareImageBlob = null;
+
+// 盤面＋スコアの1枚を作る。canvasはゲームオーバー後も描かれ続けているのでそのまま使える。
+function buildShareCanvas(score, rank) {
+  const dpr = window.devicePixelRatio || 1;
+  const SIZE = 760;                 // 盤の一辺(出力px)
+  const FOOT = 210;                 // 下の情報帯
+  const out = document.createElement("canvas");
+  out.width = SIZE; out.height = SIZE + FOOT;
+  const g = out.getContext("2d");
+
+  g.fillStyle = "#fce4ec";
+  g.fillRect(0, 0, out.width, out.height);
+
+  // 盤の中心まわりを正方形で切り出す。盤の外に出かけた石も入るよう少し広めに取る。
+  const r = CONFIG.BOARD_RADIUS * view.scale * dpr * 1.06;
+  const sx = view.cx * dpr - r, sy = view.cy * dpr - r;
+  g.save();
+  g.beginPath(); g.rect(0, 0, SIZE, SIZE); g.clip();
+  g.drawImage(canvas, sx, sy, r * 2, r * 2, 0, 0, SIZE, SIZE);
+  g.restore();
+
+  // 情報帯
+  g.fillStyle = "#fff8fb";
+  g.fillRect(0, SIZE, out.width, FOOT);
+  g.fillStyle = "#f48fb1";
+  g.fillRect(0, SIZE, out.width, 4);
+
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#e91e63";
+  g.font = `900 78px 'DotGothic16', sans-serif`;
+  g.fillText(`SCORE ${score.total}`, SIZE / 2, SIZE + 62);
+  g.fillStyle = "#4a2133";
+  g.font = `700 34px 'DotGothic16', sans-serif`;
+  g.fillText(`${rank.icon} ${rank.name}`, SIZE / 2, SIZE + 120);
+  g.font = `700 26px 'DotGothic16', sans-serif`;
+  g.globalAlpha = 0.72;
+  g.fillText(`到達ターン ${game.turn}  ／  しゅがけカーリング`, SIZE / 2, SIZE + 168);
+  g.globalAlpha = 1;
+  return out;
+}
+
+// 共有はタップ直後に呼ばないとブラウザに弾かれるので、画像はここで先に用意しておく
+function prepareShareImage(score, rank) {
+  shareImageFile = null;
+  shareImageBlob = null;
+  // 盤が最新の状態で描き直されるのを1フレーム待つ。待たないと、直前のフレームの
+  // canvasを切り出してしまい、石が入っていない絵になることがある。
+  requestAnimationFrame(() => requestAnimationFrame(() => buildShareImageNow(score, rank)));
+}
+
+function buildShareImageNow(score, rank) {
+  let out;
+  try { out = buildShareCanvas(score, rank); } catch (_) { return; }
+  out.toBlob((blob) => {
+    if (!blob) return;
+    shareImageBlob = blob;
+    try {
+      shareImageFile = new File([blob], "sugake-curling.png", { type: "image/png" });
+    } catch (_) { shareImageFile = null; }
+  }, "image/png");
+}
+
+async function shareScore() {
+  const score = calculateScore();
+  const rank = currentScoreRank(score.total);
+  const text = `しゅがけカーリング SCORE ${score.total}（${rank.name}／到達ターン ${game.turn}）`;
+  // 画像ごと共有できるならそれで(iOSのサファリは対応している)
+  if (shareImageFile && navigator.canShare?.({ files: [shareImageFile] })) {
+    try { await navigator.share({ files: [shareImageFile], text }); return; } catch (_) { return; }
+  }
+  // 画像を渡せない環境では、文字だけ共有する
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; } catch (_) { return; }
+  }
+  // 共有そのものが無い環境(PCのブラウザなど)は画像を保存する
+  if (shareImageBlob) {
+    const url = URL.createObjectURL(shareImageBlob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "sugake-curling.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+}
+
 function showGameOver(enemy) {
   game.gameOver = true;
   game.phase = "gameOver";
@@ -2243,6 +2351,14 @@ function showGameOver(enemy) {
   const rank = currentScoreRank(score.total);
   // 決めたトリックを、TRICKSの並び順で「回数×合計点」として振り返る。
   // 出していないトリックは行ごと出さない。
+  // 自己ベスト(端末内に保存)。更新したときは色を変えて知らせる
+  const prevBest = loadBestScore();
+  const isNewBest = score.total > prevBest;
+  if (isNewBest) saveBestScore(score.total);
+  const bestHtml = isNewBest
+    ? `<div class="gameOverBest isNew">じこベスト こうしん！ (まえは ${prevBest})</div>`
+    : `<div class="gameOverBest">じこベスト ${prevBest}</div>`;
+
   const counts = game.score.trickCounts ?? {};
   const trickRows = TRICKS.filter(t => counts[t.id]?.n).map(t => {
     const { n, points } = counts[t.id];   // pointsはマユゥの倍率も込みの実際の増減
@@ -2258,8 +2374,11 @@ function showGameOver(enemy) {
     `<div style="font-size:13px;opacity:0.85;">到達ターン ${game.turn}</div>` +
     (trickRows
       ? `<div class="gameOverTricks">${trickRows}</div>`
-      : `<div style="font-size:11px;opacity:0.65;margin-top:8px;">トリックは まだ 出ていない</div>`);
+      : `<div style="font-size:11px;opacity:0.65;margin-top:8px;">トリックは まだ 出ていない</div>`) +
+    bestHtml;
   document.getElementById("gameOver").classList.add("show");
+  // 盤面がまだ描かれているうちにシェア画像を用意する(共有はタップ直後に呼ぶ必要があるため)
+  prepareShareImage(score, rank);
   renderHand();
 }
 
@@ -4076,6 +4195,11 @@ function bindResetButtons() {
   document.getElementById("retryBtn")?.addEventListener("pointerdown", (e) => {
     e.stopPropagation(); e.preventDefault();
     buildSurvivalGame();
+  });
+  // シェアは click で拾う。pointerdown だと共有シートが出ない環境がある。
+  document.getElementById("shareBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    shareScore();
   });
 }
 
