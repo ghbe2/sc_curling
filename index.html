@@ -3491,6 +3491,21 @@ function updateSlideSound() {
  * -------------------------------------------------- */
 const BGM_VOLUME = 0.16; // BGMは控えめに(効果音を聞き取りやすくするため)
 let bgmGain = null;
+// イントロとゲームで曲を分ける。<audio>は1つのまま、srcを差し替えて使う
+// (WebAudioの経路は要素に対して1回しか作れないので、要素は増やさない)。
+const BGM_INTRO_SRC = "sound/%E3%83%A1%E3%82%A4%E3%83%B3_01.mp3";
+const BGM_GAME_SRC = "sound/%E3%83%A1%E3%82%A4%E3%83%B3_02.mp3";
+let bgmCurrentSrc = BGM_INTRO_SRC;
+function setBgmTrack(src) {
+  if (bgmCurrentSrc === src) return;
+  bgmCurrentSrc = src;
+  const audio = document.getElementById("bgm");
+  if (!audio) return;
+  const wasPlaying = !audio.paused;
+  audio.src = src;
+  audio.load();
+  if (wasPlaying && soundEnabled) audio.play().catch(() => {});
+}
 function bindSoundButton() {
   const audio = document.getElementById("bgm");
   const button = document.getElementById("soundToggleBtn");
@@ -4032,11 +4047,12 @@ function render() {
       const aiming = game.aim !== null;
       let aura = null;
       if (p.role === "enemy") {
-        if (aiming) aura = { color: "24,12,30", peak: 0.6, size: 1.95 };
+        // 敵だけ、狙っているあいだにほんのり暗く縁取る。なかまには何も付けないので、
+        // 「影があるか無いか」だけで敵味方が分かる
+        if (aiming) aura = { color: "24,12,30", peak: 0.3, size: 1.78 };
       } else if (p.evolved) {
-        aura = { color: "255,205,60", peak: aiming ? 0.85 : 0.6, size: 1.98 };
-      } else if (aiming) {
-        aura = { color: "255,130,185", peak: 0.52, size: 1.95 };
+        // 合体済みの目印。こちらは常に出すが、気づく程度にとどめる
+        aura = { color: "255,205,60", peak: 0.45, size: 1.8 };
       }
       if (aura) {
         const auraR = r * aura.size;
@@ -4913,32 +4929,42 @@ function introAllNames() {
   return [...allies, ...enemies];
 }
 
-// 1体ぶんの滑走を作る。dirは進む向き(1=右へ、-1=左へ)。
+// 1体ぶんの滑走を作る。流れ星のように、斜めに横切っていく。
+// 速さも大きさも出るタイミングもばらつかせて、規則的に見えないようにする。
 function makeIntroSlider(w, h, startOffscreen) {
-  const dir = Math.random() < 0.5 ? 1 : -1;
+  const dir = Math.random() < 0.5 ? 1 : -1;          // 1=右へ、-1=左へ
   const names = introAllNames();
   const base = names[Math.floor(Math.random() * names.length)];
   // 回転の向きは進む向きに合わせる(ゲーム中と同じ見え方にする)
   const spun = base.replace("_normal", dir > 0 ? "_spin_clockwise" : "_spin_counterclockwise");
   const r = h * (0.026 + Math.random() * 0.032);
+  // 斜めの角度。右上がり/右下がりを混ぜる
+  const slope = (0.35 + Math.random() * 0.5) * (Math.random() < 0.5 ? 1 : -1);
+  const speed = 1.5 + Math.random() * 2.6;           // 流れ星らしく速く、ばらつかせる
+  const margin = r * 2.4;
   return {
     name: charImage(spun) ? spun : base,
     r,
-    y: h * (0.06 + Math.random() * 0.88),
-    x: startOffscreen
-      ? (dir > 0 ? -r * 2 : w + r * 2)
-      : Math.random() * w,
-    dir,
-    speed: (0.35 + Math.random() * 0.5) * dir,
+    // 画面の外から入ってくる。斜めなので、縦は画面より広めの範囲から出す
+    x: startOffscreen ? (dir > 0 ? -margin : w + margin) : Math.random() * w,
+    y: h * (-0.25 + Math.random() * 1.5),
+    vx: speed * dir,
+    vy: speed * slope,
     rot: Math.random() * Math.PI * 2,
-    spin: (0.35 + Math.random() * 0.5) * dir,
+    spin: (0.5 + Math.random() * 0.9) * dir,
+    // 出るタイミングをばらす。0になるまでは描かない
+    delay: startOffscreen ? Math.random() * 900 : 0,
   };
 }
 
 function resetIntroSliders() {
   const w = introBg.clientWidth, h = introBg.clientHeight;
   introSliders = [];
-  for (let i = 0; i < 16; i++) introSliders.push(makeIntroSlider(w, h, false));
+  for (let i = 0; i < 14; i++) {
+    const s = makeIntroSlider(w, h, false);
+    s.delay = Math.random() * 1400;   // 最初もばらけて出てくるように
+    introSliders.push(s);
+  }
 }
 
 function drawIntroFrame(dt) {
@@ -4954,11 +4980,16 @@ function drawIntroFrame(dt) {
   introCtx.clearRect(0, 0, w, h);
 
   for (const s of introSliders) {
-    s.x += s.speed * dt * 0.06;
+    if (s.delay > 0) { s.delay -= dt; continue; }   // 出るまで待つ
+    s.x += s.vx * dt * 0.06;
+    s.y += s.vy * dt * 0.06;
     s.rot += s.spin * dt * 0.0016;
-    // 画面の外まで出たら、反対側から入り直す
-    if (s.dir > 0 && s.x > w + s.r * 2.2) Object.assign(s, makeIntroSlider(w, h, true));
-    else if (s.dir < 0 && s.x < -s.r * 2.2) Object.assign(s, makeIntroSlider(w, h, true));
+    // 画面の外まで抜けたら、また外から入り直す
+    const m = s.r * 2.6;
+    if (s.x > w + m || s.x < -m || s.y > h + m || s.y < -m) {
+      Object.assign(s, makeIntroSlider(w, h, true));
+      continue;
+    }
     const img = charImage(s.name);
     if (!img) continue;
     const size = (s.r * 2) / CHAR_IMAGE_RATIO;
@@ -5006,6 +5037,7 @@ function bindIntro() {
     e.stopPropagation();
     closeIntro();
     unlockAudio?.();
+    setBgmTrack(BGM_GAME_SRC);   // イントロはメイン1、ゲームはメイン2
   });
   document.getElementById("introRankingBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -5037,16 +5069,35 @@ function openRanking() {
     }
     const me = loadPlayerName();
     list.replaceChildren();
-    rows.forEach((row, i) => {
+    const makeRow = (row, index) => {
       const no = CHAR_IMAGE_NO[row.topCharacter] ?? null;
       const div = document.createElement("div");
       div.className = "rankingRow" + (me && row.name === me ? " me" : "");
-      div.innerHTML = `<span class="rankingNo">${i + 1}</span>`
+      div.innerHTML = `<span class="rankingNo">${index + 1}</span>`
         + (no ? `<img alt="" src="images/characters/${no}_normal.png">` : `<span></span>`)
         + `<span class="rankingWho">${escapeHtml(String(row.name ?? ""))}</span>`
         + `<span class="rankingScore">${Number(row.score) || 0}</span>`;
-      list.appendChild(div);
-    });
+      return div;
+    };
+    // 上位10件だけ出す
+    const TOP = 10;
+    rows.slice(0, TOP).forEach((row, i) => list.appendChild(makeRow(row, i)));
+    // 10位より下なら、自分のいちばん良い記録を下に足す
+    if (me) {
+      const myIndex = rows.findIndex(r => r.name === me);
+      if (myIndex >= TOP) {
+        const sep = document.createElement("div");
+        sep.className = "rankingNote";
+        sep.textContent = "・・・";
+        list.appendChild(sep);
+        list.appendChild(makeRow(rows[myIndex], myIndex));
+      } else if (myIndex < 0) {
+        const note = document.createElement("div");
+        note.className = "rankingNote";
+        note.textContent = `${rows.length}位までに 入っていない`;
+        list.appendChild(note);
+      }
+    }
   });
 }
 
