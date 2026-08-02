@@ -273,6 +273,19 @@
   .gameOverTop img { width: 34px; height: 34px; object-fit: contain; }
   .gameOverBest { margin-top: 7px; font-size: 11px; opacity: 0.8; }
   .gameOverBest.isNew { color: #ffe36e; opacity: 1; font-weight: 700; }
+  /* ランキング。名前が未設定のときだけ入力欄を出し、決めたあとは自動で送る */
+  #rankingBox { margin: 10px 0 12px; }
+  #rankingBox.hidden { display: none; }
+  #rankingNameRow { display: flex; gap: 6px; justify-content: center; }
+  #rankingNameRow.hidden { display: none; }
+  #rankingName {
+    width: 130px; padding: 5px 8px; box-sizing: border-box;
+    border: 0; border-radius: 999px; background: rgba(255,255,255,0.92); color: #4a2133;
+    font: 11px 'DotGothic16', sans-serif; text-align: center;
+  }
+  .rankingStatus { margin-top: 6px; font-size: 10px; opacity: 0.75; min-height: 13px; }
+  .rankingStatus.ok { color: #9ff5c0; opacity: 1; }
+  .rankingStatus.ng { color: #ff9db4; opacity: 1; }
   #gameOverButtons { display: flex; gap: 8px; justify-content: center; }
   #shareBtn.busy { opacity: 0.6; pointer-events: none; }
   #sideInfo {
@@ -650,7 +663,7 @@
   </div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
-<div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><div id="gameOverButtons"><button class="btn" id="shareBtn">シェア</button><button class="btn" id="retryBtn">もう一度</button></div></div></div>
+<div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><div id="rankingBox"><div id="rankingNameRow"><input id="rankingName" type="text" maxlength="12" placeholder="ニックネーム" autocomplete="off"><button class="btn" id="rankingJoinBtn">さんか</button></div><div id="rankingStatus" class="rankingStatus"></div></div><div id="gameOverButtons"><button class="btn" id="shareBtn">シェア</button><button class="btn" id="retryBtn">もう一度</button></div></div></div>
 
 <script>
 "use strict";
@@ -1648,6 +1661,7 @@ function buildSurvivalGame() {
   game.score.throughPenalty = 0;
   game.score.trickCounts = {};
   game.score.characterUses = {};
+  game.scoreSubmitted = false; // 新しいゲームなので、また送れるようにする
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.hitStopFrames = 0;
   game.fxRings = [];
@@ -2268,6 +2282,55 @@ function topCharacterId() {
   return bestN > 0 ? bestId : null;
 }
 
+/* ---------- ランキング送信 ----------
+ * GASのウェブアプリURL(.../exec)を入れると有効になる。空のあいだは何もしない。
+ * Content-Typeを text/plain にしているのは、application/json だと事前確認(preflight)が
+ * 走ってGAS側で弾かれるため。中身はJSON文字列で、GAS側は postData.contents をparseする。
+ */
+const RANKING_ENDPOINT = "";   // 例: https://script.google.com/macros/s/AKfy.../exec
+const PLAYER_NAME_KEY = "sugake-curling.playerName";
+const GAME_VERSION = "2026-08-02";
+
+function loadPlayerName() {
+  try { return localStorage.getItem(PLAYER_NAME_KEY) || ""; } catch (_) { return ""; }
+}
+function savePlayerName(name) {
+  try { localStorage.setItem(PLAYER_NAME_KEY, name); } catch (_) {}
+}
+
+function setRankingStatus(text, tone = "") {
+  const el = document.getElementById("rankingStatus");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "rankingStatus" + (tone ? " " + tone : "");
+}
+
+async function submitScore(score, rank) {
+  if (!RANKING_ENDPOINT) return;
+  const name = loadPlayerName();
+  if (!name) return;                      // 名前が未設定のうちは送らない
+  if (game.scoreSubmitted) return;        // 同じ結果を二重に送らない
+  game.scoreSubmitted = true;
+  const tricks = Object.entries(game.score.trickCounts ?? {})
+    .map(([id, v]) => `${id}:${v.n}`).join(",");
+  setRankingStatus("ランキングに おくっています…");
+  try {
+    await fetch(RANKING_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        name, score: score.total, rank: rank.name, turn: game.turn,
+        topCharacter: topCharacterId() ?? "", takeouts: game.score.enemyTakeouts,
+        tricks, version: GAME_VERSION,
+      }),
+    });
+    setRankingStatus("ランキングに のせました！", "ok");
+  } catch (_) {
+    game.scoreSubmitted = false;          // 失敗したら次の機会に送れるよう戻す
+    setRankingStatus("おくれませんでした（つうしん エラー）", "ng");
+  }
+}
+
 const BEST_SCORE_KEY = "sugake-curling.bestScore";
 function loadBestScore() {
   try { return Number(localStorage.getItem(BEST_SCORE_KEY)) || 0; } catch (_) { return 0; }
@@ -2371,6 +2434,27 @@ async function shareScore() {
   }
 }
 
+// ゲームオーバーのたびに呼ぶ。名前が決まっていれば自動で送り、
+// まだなら入力欄を出す(そこで決めたら、その回からすぐ送る)。
+function updateRankingBox(score, rank) {
+  const box = document.getElementById("rankingBox");
+  const row = document.getElementById("rankingNameRow");
+  const input = document.getElementById("rankingName");
+  if (!box || !row || !input) return;
+  // 送信先が未設定のあいだはランキングごと隠す
+  box.classList.toggle("hidden", !RANKING_ENDPOINT);
+  if (!RANKING_ENDPOINT) return;
+  const name = loadPlayerName();
+  row.classList.toggle("hidden", Boolean(name));
+  setRankingStatus("");
+  if (name) {
+    submitScore(score, rank);
+  } else {
+    input.value = "";
+    setRankingStatus("なまえを 決めると ランキングに のります");
+  }
+}
+
 function showGameOver(enemy) {
   game.gameOver = true;
   game.phase = "gameOver";
@@ -2415,6 +2499,7 @@ function showGameOver(enemy) {
       : `<div style="font-size:11px;opacity:0.65;margin-top:8px;">トリックは まだ 出ていない</div>`) +
     topHtml + bestHtml;
   document.getElementById("gameOver").classList.add("show");
+  updateRankingBox(score, rank);
   // 盤面がまだ描かれているうちにシェア画像を用意する(共有はタップ直後に呼ぶ必要があるため)
   prepareShareImage(score, rank);
   renderHand();
@@ -4238,6 +4323,16 @@ function bindResetButtons() {
   document.getElementById("shareBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     shareScore();
+  });
+  // ニックネームを決めたら、その回の結果からすぐ送る
+  document.getElementById("rankingJoinBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const input = document.getElementById("rankingName");
+    const name = (input?.value ?? "").trim().slice(0, 12);
+    if (!name) { setRankingStatus("なまえを 入れてね", "ng"); return; }
+    savePlayerName(name);
+    document.getElementById("rankingNameRow")?.classList.add("hidden");
+    submitScore(calculateScore(), currentScoreRank(calculateScore().total));
   });
 }
 
