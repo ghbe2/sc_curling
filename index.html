@@ -672,7 +672,7 @@
   </div>
 </div>
 <div id="hint">① 引いて左右を決める → 離して照準ロック<br>② 前へ押して離すとショット ／ もう一度引くと狙い直し</div>
-<div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><div id="rankingBox"><div id="rankingNameRow"><input id="rankingName" type="text" maxlength="12" placeholder="ニックネーム" autocomplete="off"><button class="btn" id="rankingJoinBtn">さんか</button></div><div id="rankingStatus" class="rankingStatus"></div></div><div id="gameOverButtons"><button class="btn" id="shareBtn">シェア</button><button class="btn" id="retryBtn">もう一度</button></div></div></div>
+<div id="gameOver"><div id="gameOverPanel"><div id="gameOverTitle">GAME OVER</div><div id="gameOverText"></div><div id="rankingBox"><div id="rankingNameRow"><input id="rankingName" type="text" maxlength="12" placeholder="ニックネーム" autocomplete="off"><button class="btn" id="rankingJoinBtn">のせる</button></div><div id="rankingStatus" class="rankingStatus"></div></div><div id="gameOverButtons"><button class="btn" id="shareBtn">シェア</button><button class="btn" id="retryBtn">もう一度</button></div></div></div>
 
 <script>
 "use strict";
@@ -2468,8 +2468,8 @@ async function shareScore() {
   }
 }
 
-// ゲームオーバーのたびに呼ぶ。名前が決まっていれば自動で送り、
-// まだなら入力欄を出す(そこで決めたら、その回からすぐ送る)。
+// ゲームオーバーのたびに呼ぶ。毎回、名前を入れて「のせる」を押してもらう。
+// 前回の名前は入れておくが、そのつど変えられる(自動送信だと名前を変えられないため)。
 function updateRankingBox(score, rank) {
   const box = document.getElementById("rankingBox");
   const row = document.getElementById("rankingNameRow");
@@ -2478,15 +2478,9 @@ function updateRankingBox(score, rank) {
   // 送信先が未設定のあいだはランキングごと隠す
   box.classList.toggle("hidden", !RANKING_ENDPOINT);
   if (!RANKING_ENDPOINT) return;
-  const name = loadPlayerName();
-  row.classList.toggle("hidden", Boolean(name));
-  setRankingStatus("");
-  if (name) {
-    submitScore(score, rank);
-  } else {
-    input.value = "";
-    setRankingStatus("なまえを 決めると ランキングに のります");
-  }
+  row.classList.remove("hidden");
+  input.value = loadPlayerName();
+  setRankingStatus("なまえを 入れて ランキングに のせよう");
 }
 
 function showGameOver(enemy) {
@@ -4384,15 +4378,16 @@ function bindResetButtons() {
     giveUp.textContent = "あきらめる";
     showGameOver(null);
   });
-  // ニックネームを決めたら、その回の結果からすぐ送る
+  // 「のせる」を押したときだけ送る。名前は毎回そのつど変えられる。
   document.getElementById("rankingJoinBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     const input = document.getElementById("rankingName");
     const name = (input?.value ?? "").trim().slice(0, 12);
     if (!name) { setRankingStatus("なまえを 入れてね", "ng"); return; }
-    savePlayerName(name);
+    savePlayerName(name);   // 次回の初期値として覚えておくだけ
+    const score = calculateScore();
     document.getElementById("rankingNameRow")?.classList.add("hidden");
-    submitScore(calculateScore(), currentScoreRank(calculateScore().total));
+    submitScore(score, currentScoreRank(score.total));
   });
 }
 
