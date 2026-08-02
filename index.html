@@ -265,6 +265,12 @@
   .gameOverTrickN { opacity: 0.7; }
   .gameOverTrickP { min-width: 52px; text-align: right; font-weight: 700; }
   /* 自己ベスト。更新したときだけ色を変えて分かるようにする */
+  /* いちばん使ったなかま */
+  .gameOverTop {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin-top: 9px; font-size: 11px; opacity: 0.9;
+  }
+  .gameOverTop img { width: 34px; height: 34px; object-fit: contain; }
   .gameOverBest { margin-top: 7px; font-size: 11px; opacity: 0.8; }
   .gameOverBest.isNew { color: #ffe36e; opacity: 1; font-weight: 700; }
   #gameOverButtons { display: flex; gap: 8px; justify-content: center; }
@@ -941,6 +947,7 @@ const game = {
     trickBonus: 0,
     throughPenalty: 0,
     trickCounts: {},   // トリックID → { n: 回数, points: 実際の増減 }
+    characterUses: {}, // キャラID → 投げた回数(いちばん使ったなかまを出すため)
   },
   wave: 1,
   enemySerial: 0,
@@ -1640,6 +1647,7 @@ function buildSurvivalGame() {
   game.score.trickBonus = 0;
   game.score.throughPenalty = 0;
   game.score.trickCounts = {};
+  game.score.characterUses = {};
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.hitStopFrames = 0;
   game.fxRings = [];
@@ -2018,6 +2026,8 @@ function throwPiece(params) {
   game.shotInProgress = true;
   game.pendingHandIndex = handIndex;
   game.stagedEvolved = false; // 投げたら合体状態はリセット
+  // 「いちばん使ったなかま」を数える(ゲームオーバーの振り返りとランキング用)
+  game.score.characterUses[character.id] = (game.score.characterUses[character.id] ?? 0) + 1;
   game.chainCountThisThrow = 0;
   game.raiseTakeThisThrow = false;
   game.directTakeThisThrow = false;
@@ -2247,6 +2257,17 @@ function enemyOnHouse() {
  *  ・シェア画像は、盤面をそのまま切り出して下にスコアを添えた1枚を作る。
  *    盤の上でキャラがごちゃごちゃしている様子が主役なので、UIは入れない。
  * ========================================================================= */
+// そのゲームでいちばん多く投げたなかま。同数なら先に解禁された方を選ぶ(結果が毎回ぶれないように)。
+function topCharacterId() {
+  const uses = game.score.characterUses ?? {};
+  let bestId = null, bestN = 0;
+  for (const c of CHARACTERS) {
+    const n = uses[c.id] ?? 0;
+    if (n > bestN) { bestN = n; bestId = c.id; }
+  }
+  return bestN > 0 ? bestId : null;
+}
+
 const BEST_SCORE_KEY = "sugake-curling.bestScore";
 function loadBestScore() {
   try { return Number(localStorage.getItem(BEST_SCORE_KEY)) || 0; } catch (_) { return 0; }
@@ -2295,6 +2316,15 @@ function buildShareCanvas(score, rank) {
   g.globalAlpha = 0.72;
   g.fillText(`到達ターン ${game.turn}  ／  しゅがけカーリング`, SIZE / 2, SIZE + 168);
   g.globalAlpha = 1;
+
+  // いちばん使ったなかまの顔を右下に添える
+  const topId = topCharacterId();
+  const topNo = topId ? CHAR_IMAGE_NO[topId] : null;
+  const topImg = topNo ? charImage(`${topNo}_normal`) : null;
+  if (topImg) {
+    const s = 132;
+    g.drawImage(topImg, SIZE - s - 14, SIZE + FOOT - s - 6, s, s);
+  }
   return out;
 }
 
@@ -2358,6 +2388,14 @@ function showGameOver(enemy) {
   const bestHtml = isNewBest
     ? `<div class="gameOverBest isNew">じこベスト こうしん！ (まえは ${prevBest})</div>`
     : `<div class="gameOverBest">じこベスト ${prevBest}</div>`;
+  // いちばん使ったなかま
+  const topId = topCharacterId();
+  const topMeta = topId ? CHARACTERS.find(c => c.id === topId) : null;
+  const topNo = topId ? CHAR_IMAGE_NO[topId] : null;
+  const topHtml = topMeta
+    ? `<div class="gameOverTop">${topNo ? `<img src="images/characters/${topNo}_normal.png" alt="">` : topMeta.icon}`
+      + `<span>いちばん つかった なかま：${topMeta.name}（${game.score.characterUses[topId]}回）</span></div>`
+    : "";
 
   const counts = game.score.trickCounts ?? {};
   const trickRows = TRICKS.filter(t => counts[t.id]?.n).map(t => {
@@ -2375,7 +2413,7 @@ function showGameOver(enemy) {
     (trickRows
       ? `<div class="gameOverTricks">${trickRows}</div>`
       : `<div style="font-size:11px;opacity:0.65;margin-top:8px;">トリックは まだ 出ていない</div>`) +
-    bestHtml;
+    topHtml + bestHtml;
   document.getElementById("gameOver").classList.add("show");
   // 盤面がまだ描かれているうちにシェア画像を用意する(共有はタップ直後に呼ぶ必要があるため)
   prepareShareImage(score, rank);
