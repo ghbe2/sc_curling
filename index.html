@@ -656,7 +656,9 @@
 const CONFIG = {
   BOARD_RADIUS: 320,
   OUT_RADIUS: 520,       // 旧盤面の外では消さず、画面外へ大きく飛んだときだけ退場
-  HOUSE_RADIUS: 230,     // 一回り拡大(195→230)。石の物理・飛距離には影響しない見た目とスコア判定の値。
+  // キャラを小さくし(36→27)、ハウスを広げる(230→250)。実カーリングはボタンと石がほぼ同じ大きさで、
+  // 従来はキャラが大きすぎて盤が詰まり膠着しやすかった。従来の36は、デロルスに1.35倍された姿にあたる。
+  HOUSE_RADIUS: 250,     // 石の物理・飛距離には影響しない、見た目とスコア判定の値。
                           // 実カーリングの比率(12/8/4/1フィート)に合わせて内側の白・赤・ボタンを
                           // HOUSE_RADIUS×2/3, ×1/3, ×1/12で描画する。物理には一切影響しない見た目のみの値
   GRID_SPACING: 40,      // 新設(PROTO23、デバッグ表示用):盤面に重ねる格子ガイドの間隔(px)。
@@ -671,10 +673,10 @@ const CONFIG = {
   WUYONG_BLAST_RADIUS: 92,
   WUYONG_BLAST_SPEED: 1.5,  // 弾く力をさらに弱く(3.0→1.5)。位置がわずかにズレる程度
   // 段階アンロック(ユーザー指定)。解禁される種類はゲーム開始時にランダムな順で決まる。
-  ALLY_START_COUNT: 4,      // 味方の初期解禁数(ミナリ/アウネ/ユゥナリナ/マユゥ)
+  ALLY_START_COUNT: 4,      // 味方の初期解禁数(どの4種になるかは毎ゲームのシャッフルで決まる)
   ALLY_UNLOCK_EVERY: 12,    // 味方は何ターンごとに増えるか
   ALLY_UNLOCK_STEP: 2,      // 味方は1回に何種増えるか(12ターンごとに2種)
-  ENEMY_START_COUNT: 3,     // 敵の初期解禁数=初期配置数(マルガリティフェラ/アルバ/ウェンカ)
+  ENEMY_START_COUNT: 3,     // 敵の初期解禁数=初期配置数(どの3種になるかは毎ゲームのシャッフルで決まる)
   ENEMY_UNLOCK_EVERY: 10,   // 敵は何ターンごとに増えるか
   ENEMY_UNLOCK_STEP: 1,     // 敵は1回に何種増えるか(10ターンごとに1種)
   SCORE_WAVE_CLEAR: 1000,
@@ -712,7 +714,7 @@ const CONFIG = {
                           // そこだけは指数を上げても撃った側の残存を大きくは減らせない
   LOW_SPEED_COLLISION_REF: 9,
   LOW_SPEED_COLLISION_MIN: 0.30,
-  PIECE_RADIUS: 36,
+  PIECE_RADIUS: 27,      // 36→27。従来の36はデロルスに1.35倍された姿にあたる(HOUSE_RADIUSのコメント参照)
   SETTLE_SPEED: 0.05,    // これ未満の速度になったら停止扱い(px/frame)
 
   /* --- 回転(カーブ)物理:PROTO23で「回転量に比例してカーブする」方式へ変更 ---
@@ -819,7 +821,8 @@ const CONFIG = {
                           // 再計測して最弱がMIN_THROW_TARGET_R(276)で止まるよう補正(検証:r=277)。
                           // 引き継ぎ再計測:65.35→47.5。GPTが追加した転がり抵抗(ROLLING_RESISTANCE)で
                           // 同じ初速でも走行距離が短くなったため実測し直した(FRICTION/抵抗変更時は要再計測)
-  MIN_THROW_TARGET_R: 276, // 最弱パワー・直進投球を止めたい盤中心からの半径(px)。引き継ぎ再調整で210→276。
+  // ハウスを250へ広げたので、最弱が止まる位置も外へずらす(ハウスの外・盤縁320の内側)
+  MIN_THROW_TARGET_R: 290, // 最弱パワー・直進投球を止めたい盤中心からの半径(px)。276→290。
                           // ハウス半径が195に拡大した現行では、最弱(0%)がハウスに届かない=r>195で止まるべき。
                           // r=276(盤縁320の内側・ハウス手前)で最弱ガードになるようDから初速を逆算(≒14.8)。
                           // --- 旧コメント(値の履歴) --- 160→210(PROTO23):
@@ -982,7 +985,7 @@ const CHARACTERS = [
   { id: "belpet", name: "ベルペット", icon: "🐮", color: "#b9acd9", trait: "あたったとき 飛びづらい。",
     mods: { knockResist: 0.22 } },
   { id: "rako", name: "ラコ", icon: "🐯", color: "#d7a982", trait: "なかまに あてたとき 止まりやすい。", mods: { selfStopVsAlly: 0.15 } },
-  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてたとき 能力を 無視。", mods: { ignoreEnemyAbilities: true } },
+  { id: "barni", name: "バーニ", icon: "🐰", color: "#d4bd8e", trait: "あてた あいての 能力を 無視。敵にも なかまにも。", mods: { ignoreEnemyAbilities: true } },
   { id: "riu", name: "リウ", icon: "🐲", color: "#e39b88", trait: "近くの 敵の 能力を 封印。", mods: { silenceEnemyAbilities: true } },
   // pathCurveMult 1.75→1.25:最大ベンド(弱いフリック)だと盤外まで曲がって出てしまい
   // 「操作できずに止まる」との報告があったため抑制。速いショットで曲がる特徴(curveSpeedEase)は維持
@@ -1013,7 +1016,9 @@ const EVOLVE_MODS = {
   mayuu:     { scoreMult: 3 },                    // 得点3倍
   belpet:    { restitution: 0.22 },               // 飛びづらさ+当てた石を弾く(ガード向き)
   rako:      { selfStopVsAlly: 0.04 },            // 味方にあてるとぴたりと止まる
-  mokokun:   { guideSelf: true },                 // 予測対象を「自分の飛ぶ方向」へ切替
+  // 盤上に居るあいだ、自分が狙われたときの飛ぶ方向も見えるようになる。
+  // 投げるときの見え方は進化前と同じ。
+  mokokun:   { guideOnBoard: true },
   mizu:      { restitution: 0.35 },               // もっと弾く
   pafu:      { selfStopVsEnemy: 0.04 },           // 敵にあてるとぴたりと止まる
   barni:     { raiseIgnoresEnemyAbilities: true },// 飛ばした石も敵能力を無視
@@ -1022,8 +1027,9 @@ const EVOLVE_MODS = {
 };
 
 // 段階アンロック(ユーザー指定):最初は固定の基本キャラ、以降はランダムな順で解禁。
-const CHARACTER_STARTERS = ["minari", "aune", "yuunarina", "mayuu"]; // 味方の初期4種
-const ENEMY_STARTERS = ["lust", "pride", "sloth"]; // 敵の初期3種=マルガリティフェラ/アルバ/ウェンカ
+// 解禁順が未生成のときだけ使う保険の並び(通常は buildUnlockSequences が毎回シャッフルする)
+const CHARACTER_STARTERS = CHARACTERS.map(c => c.id);
+const ENEMY_STARTERS = ENEMIES.map(e => e.id);
 
 function shuffleArray(arr) {
   const a = arr.slice();
@@ -1034,11 +1040,11 @@ function shuffleArray(arr) {
   return a;
 }
 // ゲーム開始時に、starterの後ろへ残りをシャッフルして並べた解禁順を作る(buildSurvivalGameで呼ぶ)
+// 解禁の順番を毎ゲーム決める。初期メンバーも固定にせず丸ごとシャッフルして、
+// 毎回ちがう顔ぶれで始まるようにする(同じ立ち上がりの繰り返しで単調になるため)。
 function buildUnlockSequences() {
-  const allyRest = shuffleArray(CHARACTERS.map(c => c.id).filter(id => !CHARACTER_STARTERS.includes(id)));
-  game.allyUnlockSeq = [...CHARACTER_STARTERS, ...allyRest];
-  const enemyRest = shuffleArray(ENEMIES.map(e => e.id).filter(id => !ENEMY_STARTERS.includes(id)));
-  game.enemyUnlockSeq = [...ENEMY_STARTERS, ...enemyRest];
+  game.allyUnlockSeq = shuffleArray(CHARACTERS.map(c => c.id));
+  game.enemyUnlockSeq = shuffleArray(ENEMIES.map(e => e.id));
 }
 function unlockedCharacterCount() {
   if (game.allOutMode) return CHARACTERS.length;
@@ -1139,7 +1145,7 @@ const EVOLVE_TRAIT_TEXT = {
   pafu: "敵に あてたとき ぴたりと止まる。",
   mayuu: "スコアが 3倍 もらえる。",
   yuunarina: "飛ばした キャラも、同じように 守りを 通す。",
-  mokokun: "自分を 飛ばす 方向が 分かる。",
+  mokokun: "盤の上に いるとき、自分が 飛ぶ 方向も 分かる。",
   mizu: "あたったとき もっと 弾く。",
 };
 function evolvedTraitText(character) {
@@ -1375,7 +1381,7 @@ function createPiece(x, y, role, character = null) {
       silenceRadiusMult: 1,   // 敵能力の封印範囲の倍率(リウ進化)
       attractRangeMult: 1,    // 敵の引き寄せ範囲の倍率(ヒロイベオ進化)
       raiseIgnoresEnemyAbilities: false, // レイズテイクでも敵能力を無視(バーニ進化)
-      guideSelf: false,       // 軌道予測の対象を「自分の飛ぶ方向」にする(モコクン進化)
+      guideOnBoard: false,    // 盤上に居るとき、自分が狙われた際の飛ぶ方向も見える(モコクン進化)
       radiusScale: 1,
       trajectoryGuide: false,
       partType: null,
@@ -1496,8 +1502,10 @@ function enemyAbilitySuppressed(enemy) {
   );
 }
 
+// バーニは「触れた相手の能力を無視する」。リウ(近くの敵だけを封印)との差別化のため、
+// 敵だけでなく、なかまの能力(ベルペットの飛びづらさなど)も無視する。
 function barniBypassesEnemy(attacker, target) {
-  if (attacker?.role !== "player" || target?.role !== "enemy") return false;
+  if (attacker?.role !== "player" || !target) return false;
   // バーニ本体、またはバーニ進化に弾かれてレイズテイクに向かう石(inheritsIgnoreAbilities)
   return Boolean(attacker.mods.ignoreEnemyAbilities || attacker.inheritsIgnoreAbilities);
 }
@@ -3346,9 +3354,18 @@ function firstTrajectoryGuideHit(aim, shooterRadius) {
   return rayFirstHit(origin.x, origin.y, aim.aimDirX, aim.aimDirY, shooterRadius);
 }
 
-// モコクンの能力:最初に当たる石の「相手が飛ぶ方向」(通常)、または進化で
-// 「自分が弾かれて飛ぶ方向」(guideSelf)を見せる。自分の弾道(ピンクの線)には破線を重ねない。
-function drawTrajectoryGuide(aim, shooterRadius, showSelf = false) {
+// ガイドを出すか。モコクンを投げるときは常に出す(進化前と同じ)。
+// 進化したモコクンが盤上に居るときは、そのモコクンを狙った場合にも出す
+// (=誰で投げても、盤の上のモコクンが飛ぶ方向は見える)。
+function shouldShowTrajectoryGuide(aim, shooterRadius, selectedCharacter) {
+  if (selectedCharacter?.mods?.trajectoryGuide) return true;
+  const hit = firstTrajectoryGuideHit(aim, shooterRadius);
+  return Boolean(hit?.target?.mods?.guideOnBoard);
+}
+
+// モコクンの能力:最初に当たる石が、どちらへ飛んでいくかを見せる。
+// 自分の弾道(ピンクの線)には破線を重ねない。
+function drawTrajectoryGuide(aim, shooterRadius) {
   const hit = firstTrajectoryGuideHit(aim, shooterRadius);
   if (!hit) return;
   const stone = hit.target;
@@ -3358,21 +3375,10 @@ function drawTrajectoryGuide(aim, shooterRadius, showSelf = false) {
   const nLen = Math.hypot(nx, ny) || 1;
   const normX = nx / nLen, normY = ny / nLen;
 
-  let originX, originY, dirX, dirY, movingRadius;
-  if (showSelf) {
-    // 自分の進行方向から法線成分を抜いた接線方向(ビリヤードの90度ルール)
-    const along = aim.aimDirX * normX + aim.aimDirY * normY;
-    let tx = aim.aimDirX - along * normX, ty = aim.aimDirY - along * normY;
-    const tLen = Math.hypot(tx, ty);
-    if (tLen < 1e-6) return; // 完全な正面衝突では自分はほぼ止まるので描かない
-    dirX = tx / tLen; dirY = ty / tLen;
-    originX = hit.contactX; originY = hit.contactY;
-    movingRadius = shooterRadius;
-  } else {
-    dirX = normX; dirY = normY;
-    originX = stone.x; originY = stone.y;
-    movingRadius = pieceRadius(stone);
-  }
+  // あてた石は法線方向へまっすぐ飛ぶ
+  const dirX = normX, dirY = normY;
+  const originX = stone.x, originY = stone.y;
+  const movingRadius = pieceRadius(stone);
 
   // 次に当たる石があればそこまで、なければ一定長で描く
   const next = rayFirstHit(originX, originY, dirX, dirY, movingRadius, [stone.uid]);
@@ -3382,8 +3388,7 @@ function drawTrajectoryGuide(aim, shooterRadius, showSelf = false) {
 
   ctx.save();
   ctx.lineWidth = 2;
-  // 自分の方向は暖色、相手の方向は寒色にして区別する
-  const color = showSelf ? "233,30,99" : "0,105,110";
+  const color = "0,105,110";
   ctx.setLineDash([7, 5]);
   ctx.strokeStyle = `rgba(${color},0.9)`;
   ctx.beginPath();
@@ -3502,7 +3507,6 @@ function render() {
   const launcherRadiusScale = stagedEvo.radiusScale ?? selectedCharacter?.mods?.radiusScale ?? 1;
   // 軌道予測の段数:通常1、ユゥナリナ進化(合体済み)なら2つ先まで
   // 軌道予測の対象:通常は相手の飛ぶ方向、モコクン進化(合体済み)なら自分の飛ぶ方向
-  const stagedGuideSelf = Boolean(stagedEvo.guideSelf ?? selectedCharacter?.mods?.guideSelf);
   const launcherRadius = CONFIG.PIECE_RADIUS * launcherRadiusScale * view.scale;
   const launcherWobbling = game.launcherReady && selectedCharacter && !a && !game.lockedAim;
   const launcherWobble = launcherWobbling ? performance.now() / 430 : 0;
@@ -3539,8 +3543,8 @@ function render() {
 
   if (!a && game.lockedAim) {
     drawAimDirectionLine(game.lockedAim);
-    if (selectedCharacter?.mods?.trajectoryGuide) {
-      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideSelf);
+    if (shouldShowTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, selectedCharacter)) {
+      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale);
     }
     // 発射位置の下の案内文は表示しない(チュートリアル側で説明しているため)
   }
@@ -3551,8 +3555,8 @@ function render() {
   if (a) {
     const pushing = a.state === "push";
     drawAimDirectionLine(a);
-    if (selectedCharacter?.mods?.trajectoryGuide) {
-      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, stagedGuideSelf);
+    if (shouldShowTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, selectedCharacter)) {
+      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale);
     }
 
     // 引っ張りの線は、狙いのガイドとちょうど一直線(反対向き)になるように描く。
@@ -3667,12 +3671,25 @@ function render() {
       ctx.fill();
       ctx.restore();
     }
-    if (p.evolved && p.state === "onboard") {
+    // 足元の輪。敵味方をひと目で見分けられるように、全員に色違いで付ける。
+    // なかま=桃、なかま(合体)=金、敵=青緑。当たり判定の大きさとも一致する。
+    if (p.state === "onboard") {
+      const ringStyle = p.role === "enemy"
+        ? { color: "rgba(64,214,224,0.9)", glow: "rgba(64,214,224,0.28)" }
+        : p.evolved
+          ? { color: "rgba(255,203,51,0.95)", glow: "rgba(255,203,51,0.32)" }
+          : { color: "rgba(255,120,175,0.9)", glow: "rgba(255,120,175,0.26)" };
       ctx.save();
+      ctx.globalAlpha = alpha;
+      // 内側にうっすら敷いて、絵と重なっても輪が沈まないようにする
       ctx.beginPath();
-      ctx.arc(drawX, drawY, r * 1.22, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,203,51,0.85)";
-      ctx.lineWidth = Math.max(2, r * 0.09);
+      ctx.arc(drawX, drawY, r * 1.14, 0, Math.PI * 2);
+      ctx.fillStyle = ringStyle.glow;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(drawX, drawY, r * 1.14, 0, Math.PI * 2);
+      ctx.strokeStyle = ringStyle.color;
+      ctx.lineWidth = Math.max(2, r * 0.1);
       ctx.stroke();
       ctx.restore();
     }
