@@ -2336,8 +2336,12 @@ async function submitScore(score, rank) {
     .map(([id, v]) => `${id}:${v.n}`).join(",");
   setRankingStatus("ランキングに おくっています…");
   try {
+    // mode:"no-cors" が要る。GASのウェブアプリは応答にCORSの許可を付けないので、
+    // ふつうのfetchだと「送信はできているのに、応答を読む段階で失敗」になる。
+    // no-corsなら送信だけ通る。代わりに結果は読めないので、成否は判定できない。
     await fetch(RANKING_ENDPOINT, {
       method: "POST",
+      mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         name, score: score.total, rank: rank.name, turn: game.turn,
@@ -2345,7 +2349,7 @@ async function submitScore(score, rank) {
         tricks, version: GAME_VERSION,
       }),
     });
-    setRankingStatus("ランキングに のせました！", "ok");
+    setRankingStatus("ランキングに おくりました", "ok");
   } catch (_) {
     game.scoreSubmitted = false;          // 失敗したら次の機会に送れるよう戻す
     setRankingStatus("おくれませんでした（つうしん エラー）", "ng");
@@ -2366,48 +2370,43 @@ let shareImageBlob = null;
 // 盤面＋スコアの1枚を作る。canvasはゲームオーバー後も描かれ続けているのでそのまま使える。
 function buildShareCanvas(score, rank) {
   const dpr = window.devicePixelRatio || 1;
-  const SIZE = 760;                 // 盤の一辺(出力px)
-  const FOOT = 210;                 // 下の情報帯
+  // 正方形にする。Xなどは縦長の画像を勝手に切り抜いて見切れるため。
+  const SIZE = 1080;
   const out = document.createElement("canvas");
-  out.width = SIZE; out.height = SIZE + FOOT;
+  out.width = SIZE; out.height = SIZE;
   const g = out.getContext("2d");
 
   g.fillStyle = "#fce4ec";
-  g.fillRect(0, 0, out.width, out.height);
+  g.fillRect(0, 0, SIZE, SIZE);
 
-  // 盤の中心まわりを正方形で切り出す。盤の外に出かけた石も入るよう少し広めに取る。
+  // 盤の中心まわりを正方形で切り出して全面に敷く
   const r = CONFIG.BOARD_RADIUS * view.scale * dpr * 1.06;
-  const sx = view.cx * dpr - r, sy = view.cy * dpr - r;
-  g.save();
-  g.beginPath(); g.rect(0, 0, SIZE, SIZE); g.clip();
-  g.drawImage(canvas, sx, sy, r * 2, r * 2, 0, 0, SIZE, SIZE);
-  g.restore();
+  g.drawImage(canvas, view.cx * dpr - r, view.cy * dpr - r, r * 2, r * 2, 0, 0, SIZE, SIZE);
 
-  // 情報帯
-  g.fillStyle = "#fff8fb";
-  g.fillRect(0, SIZE, out.width, FOOT);
+  // 下に帯を重ねて、スコアといちばん使ったなかまの顔だけを載せる
+  const BAND = 200;
+  const bandY = SIZE - BAND;
+  g.fillStyle = "rgba(255,248,251,0.94)";
+  g.fillRect(0, bandY, SIZE, BAND);
   g.fillStyle = "#f48fb1";
-  g.fillRect(0, SIZE, out.width, 4);
+  g.fillRect(0, bandY, SIZE, 5);
 
-  g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillStyle = "#e91e63";
-  g.font = `900 78px 'DotGothic16', sans-serif`;
-  g.fillText(`SCORE ${score.total}`, SIZE / 2, SIZE + 62);
-  g.fillStyle = "#4a2133";
-  g.font = `700 34px 'DotGothic16', sans-serif`;
-  g.fillText(`${rank.icon} ${rank.name}`, SIZE / 2, SIZE + 120);
-  g.font = `700 26px 'DotGothic16', sans-serif`;
-  g.globalAlpha = 0.72;
-  g.fillText(`到達ターン ${game.turn}  ／  しゅがけカーリング`, SIZE / 2, SIZE + 168);
-  g.globalAlpha = 1;
-
-  // いちばん使ったなかまの顔を右下に添える
   const topId = topCharacterId();
   const topNo = topId ? CHAR_IMAGE_NO[topId] : null;
   const topImg = topNo ? charImage(`${topNo}_normal`) : null;
+  const faceSize = 168;
+  // 顔があるぶんだけスコアを左に寄せて、中央が揃って見えるようにする
+  const centerX = topImg ? (SIZE - faceSize - 30) / 2 + 10 : SIZE / 2;
+
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#e91e63";
+  g.font = `900 104px 'DotGothic16', sans-serif`;
+  g.fillText(`${score.total}`, centerX, bandY + BAND / 2 + 6);
+  g.font = `900 34px 'DotGothic16', sans-serif`;
+  g.fillText("SCORE", centerX, bandY + 38);
+
   if (topImg) {
-    const s = 132;
-    g.drawImage(topImg, SIZE - s - 14, SIZE + FOOT - s - 6, s, s);
+    g.drawImage(topImg, SIZE - faceSize - 24, bandY + (BAND - faceSize) / 2, faceSize, faceSize);
   }
   return out;
 }
@@ -2445,7 +2444,7 @@ function buildShareImageNow(score, rank) {
 async function shareScore() {
   const score = calculateScore();
   const rank = currentScoreRank(score.total);
-  const text = `しゅがけカーリング SCORE ${score.total}（${rank.name}／到達ターン ${game.turn}）`;
+  const text = `しゅがけカーリング SCORE ${score.total}（${rank.name}）\n#SugarCageCurling`;
   // 画像ごと共有できるならそれで(iOSのサファリは対応している)
   if (shareImageFile && navigator.canShare?.({ files: [shareImageFile] })) {
     try { await navigator.share({ files: [shareImageFile], text }); return; } catch (_) { return; }
