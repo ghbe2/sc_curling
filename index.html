@@ -34,23 +34,33 @@
   #hud .label { opacity: 0.6; font-size: 10px; margin-right: 2px; }
   /* 4つのボタンを2段2列で、すべて同じ大きさに揃える */
   /* 右上の4ボタン。左上のスコア表示と取り合いになるので、必要な幅だけに絞る */
+  /* 右上はサウンドと「いろいろ」の2つだけ。中身はメニューに畳んで盤を広く使う */
   #scenarioBar {
     position: fixed; top: 6px; right: 6px; z-index: 4;
-    display: grid; grid-template-columns: repeat(2, 68px); gap: 4px;
+    display: flex; gap: 4px;
   }
-  /* 「あきらめる」は誤爆すると取り返しがつかないので、他より落ち着いた色にして
-     2列ぶんの幅で下段に置く(押し間違いを減らす) */
+  #scenarioBar .btn {
+    height: 26px; width: 74px; padding: 0 3px; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; white-space: nowrap;
+  }
+  #menuPanel {
+    position: fixed; top: 39px; right: 6px; z-index: 5;
+    display: none; flex-direction: column; gap: 5px;
+    padding: 7px; border-radius: 14px;
+    background: rgba(255,248,251,0.97); box-shadow: 0 8px 22px rgba(80,30,50,0.24);
+  }
+  #menuPanel.show { display: flex; }
+  #menuPanel .btn {
+    width: 126px; height: 30px; font-size: 11px;
+    display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  }
+  /* 「あきらめる」は誤爆すると取り返しがつかないので、他より落ち着いた色にする */
   #giveUpBtn {
-    grid-column: 1 / -1;
     background: linear-gradient(180deg, #cfc0c8 0%, #a8949f 100%);
     box-shadow: 0 2px 0 #8d7a85, 0 3px 9px rgba(90,70,80,0.2);
   }
   #giveUpBtn.hidden { display: none; }
-  #scenarioBar .btn {
-    height: 25px; padding: 0 3px; box-sizing: border-box;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 9px; white-space: nowrap;
-  }
   /* ボタンは「白地＋枠線」をやめ、桃色の塗り＋下側の影で、押せるアメ玉のように見せる。
      ソケット(#handBar)とチュートリアル(#throwTutorial / #tutorialToggle / #swapUiBtn)は
      それぞれ自前の見た目を持っているので、ここの変更の影響を受けない。 */
@@ -408,7 +418,8 @@
   }
   #fastForwardBtn {
     /* B対応:早送りボタンを目立たせる。位置を上へ(盤とランチャーの間の余白)、サイズを大きく */
-    position: fixed; left: 50%; right: auto; top: 60%; bottom: auto; z-index: 3;
+    /* 親指で押しやすいよう、少し下げる */
+    position: fixed; left: 50%; right: auto; top: 66%; bottom: auto; z-index: 3;
     transform: translateX(-50%); width: 150px; height: 60px; padding: 6px 3px;
     border-radius: 18px; font-size: 17px; font-weight: 800;
     box-shadow: 0 4px 0 #c33a66, 0 6px 16px rgba(120,30,60,0.28);
@@ -685,10 +696,13 @@
 <div id="dangerAlert" aria-live="polite"></div>
 <div id="abilityInfo" aria-live="polite"></div>
 <div id="scenarioBar">
-  <button class="btn" id="howToBtn">遊び方</button>
+  <button class="btn" id="soundToggleBtn" aria-pressed="true">サウンド ON</button>
+  <button class="btn" id="menuBtn" aria-expanded="false">いろいろ</button>
+</div>
+<div id="menuPanel">
+  <button class="btn" id="howToBtn">あそびかた</button>
   <button class="btn" id="trickBookBtn">トリック</button>
   <button class="btn" id="characterBookBtn">キャラクター</button>
-  <button class="btn" id="soundToggleBtn" aria-pressed="true">サウンド ON</button>
   <button class="btn" id="giveUpBtn">あきらめる</button>
 </div>
 <!-- デバッグ用。最終的には削除する -->
@@ -1059,12 +1073,12 @@ const game = {
 // 対象表記なし=敵味方問わず、「味方に」「敵に」で限定)で統一する
 const ENEMIES = [
   { id: "sloth", name: "ウェンカ", sin: "怠惰", icon: "🐻", color: "#b98a72", trait: "なかまに あたったとき 分身を 生む。" },
-  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "なかまに あたったとき 小さく 飛びやすく する。" },
+  { id: "envy", name: "エノ", sin: "嫉妬", icon: "🐴", color: "#90a2ad", trait: "なかまを 小さく、敵を 大きく する。" },
   { id: "lust", name: "マルガリティフェラ", sin: "色欲", icon: "🐐", color: "#8a7189", trait: "速い あいてが あたったとき 飛びづらい。" },
   { id: "wrath", name: "ウーヨン", sin: "憤怒", icon: "🐵", color: "#967f91", trait: "速く 近づき まわりを 弾く。" },
   { id: "pride", name: "アルバ", sin: "傲慢", icon: "🦁", color: "#d6ad58", trait: "じかに あてても 飛びにくい。飛ばした キャラなら 飛ぶ。" },
   { id: "greed", name: "ジーナ／マミ", sin: "強欲", icon: "🦊", color: "#e4e1dc", trait: "毎ターン 姿が 変わる。ジーナは 敵に、マミは なかまに 飛ばされにくい。" },
-  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "あたった 敵を 大きく 飛びにくく する。" },
+  { id: "gluttony", name: "デロルス", sin: "暴食", icon: "🐊", color: "#d86e83", trait: "ふれた なかまを 食べる。合体は 解ける だけ。" },
 ];
 
 // トリック(ショットの呼称)の一覧。表示・採点・一覧パネルをこの定義だけで賄う。
@@ -1657,6 +1671,7 @@ function applyEnemyContactAbilities(a, b) {
       enemy.hasSplit = true;
       spawnMuiNear(enemy);
     }
+    // エノ:なかまは小さく弱く、敵は大きく飛びにくくする(元デロルスの効果を引き継いだ)
     if (enemy.enemyId === "envy" && other.role === "player" && !other.shrunkByEno) {
       activateOnce(`eno:${enemy.uid}`, () => {
         other.shrunkByEno = true;
@@ -1670,10 +1685,9 @@ function applyEnemyContactAbilities(a, b) {
         playUiPopSound(310, 0.04);
       });
     }
-    // デロルスが大きくするのは敵だけ。なかままで膨らむと盤が見づらくなるため。
-    if (enemy.enemyId === "gluttony" && other.role === "enemy" && other.uid !== enemy.uid && !other.enlargedByDellorath) {
-      activateOnce(`dellorath:${enemy.uid}`, () => {
-        other.enlargedByDellorath = true;
+    if (enemy.enemyId === "envy" && other.role === "enemy" && other.uid !== enemy.uid && !other.enlargedByEno) {
+      activateOnce(`enoBig:${enemy.uid}`, () => {
+        other.enlargedByEno = true;
         other.mods.radiusScale = Math.min(1.7, other.mods.radiusScale * 1.35);
         other.mods.knockResist = Math.min(other.mods.knockResist * 0.5, 0.45);
         flashEnemyAbility(enemy);
@@ -1681,7 +1695,33 @@ function applyEnemyContactAbilities(a, b) {
         playEnemyPopSound();
       });
     }
+    // デロルス:触れたなかまを食べる。合体していれば合体を解くだけ、
+    // そうでなければ盤から取り除く。混戦の解消にもなる。
+    if (enemy.enemyId === "gluttony" && other.role === "player") {
+      activateOnce(`dellorath:${enemy.uid}:${other.uid}`, () => {
+        if (other.evolved) {
+          devolvePiece(other);
+        } else {
+          other.state = "exiting";
+          other.fallT = 0;
+        }
+        addImpactFx(other.x, other.y, 4.2, true);
+        flashEnemyAbility(enemy);
+        playEnemyPopSound();
+      });
+    }
   }
+}
+
+// 合体を解いて進化前に戻す。合体で書き換えた項目だけを元の値へ戻すので、
+// そのあとに他の能力(エノで小さくされたなど)で変わったぶんは残る。
+function devolvePiece(piece) {
+  if (!piece?.evolved) return;
+  if (piece.preEvolveMods) {
+    for (const [key, value] of Object.entries(piece.preEvolveMods)) piece.mods[key] = value;
+  }
+  piece.preEvolveMods = null;
+  piece.evolved = false;
 }
 
 function applyEnemyPostMoveAbilities() {
@@ -1862,8 +1902,10 @@ function updateSideInfoVisibility() {
   const dim = aiming ? "0.12" : "1";
   const bar = document.getElementById("scenarioBar");
   const side = document.getElementById("sideInfo");
+  const danger = document.getElementById("dangerAlert");
   if (bar) bar.style.opacity = dim;
   if (side) side.style.opacity = dim;
+  if (danger) danger.style.opacity = aiming ? "0.12" : "";  // 未指定に戻してCSSの表示制御へ返す
 }
 
 function updateThrowTutorial() {
@@ -2129,8 +2171,12 @@ function throwPiece(params) {
   const p = createPiece(launch.x, launch.y, "player", character);
   p.isCurrentShot = true;
   // 合体済みなら進化効果を適用(1段階)。以降の描画で★リングを付ける。
+  // デロルスに食べられたときに合体だけ解けるよう、書き換える前の値を控えておく。
   if (game.stagedEvolved) {
-    Object.assign(p.mods, EVOLVE_MODS[character.id] || { radiusScale: (p.mods.radiusScale ?? 1) * 0.85 });
+    const evo = EVOLVE_MODS[character.id] || { radiusScale: (p.mods.radiusScale ?? 1) * 0.85 };
+    p.preEvolveMods = {};
+    for (const key of Object.keys(evo)) p.preEvolveMods[key] = p.mods[key];
+    Object.assign(p.mods, evo);
     p.evolved = true;
   }
   const speed = params.speed * p.mods.speedMult;
@@ -5020,6 +5066,17 @@ function drawIntroFrame(dt) {
   introCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   introCtx.clearRect(0, 0, w, h);
 
+  // 盤と同じ格子を敷く。間隔はゲーム中と同じくキャラの直径ぶん。
+  const gridStep = CONFIG.PIECE_RADIUS * 2 * view.scale;
+  if (gridStep > 4) {
+    introCtx.strokeStyle = "rgba(255,255,255,0.5)";
+    introCtx.lineWidth = 1;
+    introCtx.beginPath();
+    for (let x = (w / 2) % gridStep; x < w; x += gridStep) { introCtx.moveTo(x, 0); introCtx.lineTo(x, h); }
+    for (let y = (h / 2) % gridStep; y < h; y += gridStep) { introCtx.moveTo(0, y); introCtx.lineTo(w, y); }
+    introCtx.stroke();
+  }
+
   collideIntroSliders();
 
   for (const s of introSliders) {
@@ -5169,6 +5226,30 @@ async function fetchRanking() {
   }
 }
 
+// 右上の「いろいろ」。中の項目を押したらメニューは閉じる。
+function bindMenu() {
+  const btn = document.getElementById("menuBtn");
+  const panel = document.getElementById("menuPanel");
+  if (!btn || !panel) return;
+  const close = () => { panel.classList.remove("show"); btn.setAttribute("aria-expanded", "false"); };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = !panel.classList.contains("show");
+    panel.classList.toggle("show", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  // 中の項目を押したら閉じる。「あきらめる」だけは確認の2段階があるので閉じない
+  for (const id of ["howToBtn", "trickBookBtn", "characterBookBtn"]) {
+    document.getElementById(id)?.addEventListener("click", close);
+  }
+  // メニューの外を触っても閉じる
+  window.addEventListener("pointerdown", (e) => {
+    if (!panel.classList.contains("show")) return;
+    if (e.target.closest("#menuPanel") || e.target.closest("#menuBtn")) return;
+    close();
+  }, true);
+}
+
 function bindRankingOverlay() {
   const overlay = document.getElementById("rankingOverlay");
   const close = () => overlay?.classList.remove("show");
@@ -5190,6 +5271,7 @@ bindCharacterBook();
 bindTrickBook();
 bindSoundButton();
 bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
+bindMenu();
 bindRankingOverlay();
 buildSurvivalGame();
 bindIntro();        // イントロは最初の1回だけ。「もう一度」からは出さない
