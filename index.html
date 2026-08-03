@@ -536,6 +536,8 @@
     font-size: 13px; line-height: 1; border-radius: 8px;
   }
   .howToLead { margin: 11px 14px 4px; text-align: center; color: #e91e63; font-size: 12px; }
+  /* 文中に混ぜるハート。絵文字と同じくらいの大きさで、行の高さを崩さない */
+  .heartInline { height: 1.35em; width: auto; vertical-align: -0.32em; }
   /* ⑧⑨からキャラ性能へ飛ぶ導線 */
   .howToBookLink {
     display: block; width: 100%; margin-top: 6px; padding: 5px 4px;
@@ -739,11 +741,11 @@
 <div id="howToOverlay" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
   <div id="howToPanel">
     <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose" aria-label="遊び方を閉じる">×</button></div>
-    <p class="howToLead">ハウスの まんなか(ボタン)の 💝に 近づけるな！</p>
+    <p class="howToLead">ハウスの まんなか(ボタン)の <img class="heartInline" src="images/item/heart.png" alt="ハート">に 近づけるな！</p>
     <div id="howToPages">
     <div class="howToPage active" data-page="0">
-      <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① 💝を守ろう</b>すこしずつハートへ迫る敵を、ハウスの外へはじき出そう。</div></article>
-      <article class="howToCard"><canvas class="howToShot" data-scene="pinch"></canvas><div class="howToCopy"><b>② 重なったらピンチ！</b>敵が💝に重なったら、そのターンで弾けないとゲームオーバー。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="heart"></canvas><div class="howToCopy"><b>① <img class="heartInline" src="images/item/heart.png" alt="ハート">を守ろう</b>すこしずつハートへ迫る敵を、ハウスの外へはじき出そう。</div></article>
+      <article class="howToCard"><canvas class="howToShot" data-scene="pinch"></canvas><div class="howToCopy"><b>② 重なったらピンチ！</b>敵が<img class="heartInline" src="images/item/heart.png" alt="ハート">に重なったら、そのターンで弾けないとゲームオーバー。</div></article>
       <article class="howToCard"><canvas class="howToShot" data-scene="reinforce"></canvas><div class="howToCopy"><b>③ 侵入に注意</b>敵がボタン（ハウスの中心）に迫ると、外から新しい敵がやって来るよ。</div></article>
     </div>
     <div class="howToPage" data-page="1">
@@ -3912,10 +3914,17 @@ function render() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const heartFloat = Math.sin(performance.now() / 430) * 3;
-  ctx.fillStyle = "#e91e63";
-  ctx.font = `${Math.max(16, hR / 8)}px 'Apple Color Emoji','Segoe UI Emoji',sans-serif`;
-  ctx.fillText("💝", 0, 1 + heartFloat);
-  // 目的テキスト「敵を弾いて💝を守れ！」はチュートリアルに移したので盤面には表示しない
+  // ボタンの上のハート。画像が読めるまでは絵文字で描く
+  const heartSize = Math.max(16, hR / 8) * 1.35;
+  const heartImg = itemImage("heart");
+  if (heartImg) {
+    ctx.drawImage(heartImg, -heartSize / 2, 1 + heartFloat - heartSize / 2, heartSize, heartSize);
+  } else {
+    ctx.fillStyle = "#e91e63";
+    ctx.font = `${Math.max(16, hR / 8)}px 'Apple Color Emoji','Segoe UI Emoji',sans-serif`;
+    ctx.fillText("💝", 0, 1 + heartFloat);
+  }
+  // 目的テキストはチュートリアルに移したので盤面には表示しない
 
   // 格子ガイド:縦線がストーン中心に来るよう、間隔をストーン直径(PIECE_RADIUS×2)にする。
   // これで隣り合うストーンがそれぞれ縦線上に中心を合わせて並ぶ。盤の円でクリップして描画。
@@ -4229,6 +4238,24 @@ function charImage(name) {
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
 
+// キャラ以外の絵(ハートなど)。読み込みの作りはキャラ画像と同じ。
+const itemImages = new Map();
+const itemImageMissing = new Set();
+function itemImage(name) {
+  if (!name || itemImageMissing.has(name)) return null;
+  let img = itemImages.get(name);
+  if (!img) {
+    img = new Image();
+    img.onerror = () => { itemImageMissing.add(name); itemImages.delete(name); };
+    img.onload = () => {
+      if (document.getElementById("howToOverlay")?.classList.contains("show")) drawHowToShots(0);
+    };
+    img.src = `images/item/${name}.png`;
+    itemImages.set(name, img);
+  }
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+
 const CHAR_STATES = ["normal", "excited", "hit", "spin_clockwise", "spin_counterclockwise"];
 // そのキャラが使う絵を先に読ませておく。読み込み中は絵文字に落ちて一瞬ちらつくため、
 // 手札に入った時点・盤に出た時点でまとめて要求しておく(すでに要求済みなら何もしない)。
@@ -4441,7 +4468,7 @@ function updateDangerAlert() {
     el.textContent = "ぴんちっ！";
     const sub = document.createElement("span");
     sub.className = "dangerSub";
-    sub.textContent = "このショットで 💝から どかそう！";
+    sub.innerHTML = `このショットで <img class="heartInline" src="images/item/heart.png" alt="ハート">から どかそう！`;
     el.appendChild(sub);
   }
 }
@@ -4675,14 +4702,20 @@ function drawHowToScene(canvasEl, time = 0) {
     const label = (text, x, y, color = "#e91e63", size = 12) => {
       g.fillStyle = color; g.font = `700 ${size}px 'DotGothic16', sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, x, y);
     };
+    // ボタンの上のハート。読み込めていなければ絵文字で描く
+    const heart = (x, y, size) => {
+      const img = itemImage("heart");
+      if (img) g.drawImage(img, x - size / 2, y - size / 2, size, size);
+      else label("💝", x, y, "#e91e63", size * 0.8);
+    };
 
     const scene = canvasEl.dataset.scene;
     if (scene === "heart") {
-      house(w * .5, h * .48, 33); label("💝", w * .5, h * .48, "#e91e63", 18);
+      house(w * .5, h * .48, 33); heart(w * .5, h * .48, 24);
       stone(w * .18, h * .25, "🐻", true); stone(w * .8, h * .7, "🐊", true);
       arrow(w * .26, h * .29, w * .41, h * .42); arrow(w * .72, h * .66, w * .59, h * .54);
     } else if (scene === "pinch") {
-      house(w * .42, h * .5, 34); label("💝", w * .42, h * .5, "#e91e63", 18); stone(w * .42, h * .5, "🦁", true, 14);
+      house(w * .42, h * .5, 34); heart(w * .42, h * .5, 24); stone(w * .42, h * .5, "🦁", true, 14);
       label("ぴんちっ！", w * .76, h * .3, "#c40030", 14); arrow(w * .68, h * .7, w * .52, h * .57, "#c40030");
       label("このターンで弾く", w * .75, h * .83, "#4a2133", 9);
     } else if (scene === "reinforce") {
