@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ハウスの色くらべ</title>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#fce4ec; color:#4a2133;
+    font-family:'DotGothic16', system-ui, sans-serif; }
+  h1 { margin:14px 12px 4px; font-size:15px; color:#e91e63; }
+  p.note { margin:0 12px 10px; font-size:11px; line-height:1.6; opacity:.85; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:12px; padding:0 10px 20px; }
+  .card { background:#fff8fb; border:2px solid #f5b0c8; border-radius:14px; padding:8px; }
+  .card h2 { margin:0 0 2px; font-size:13px; color:#e91e63; }
+  .card .desc { font-size:10px; line-height:1.5; opacity:.8; min-height:2.6em; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; }
+  .swatches { display:flex; gap:4px; margin-top:6px; }
+  .sw { flex:1; height:14px; border-radius:4px; border:1px solid rgba(0,0,0,.12); }
+  .code { margin-top:5px; font-size:9px; line-height:1.5; opacity:.7; word-break:break-all; }
+</style>
+</head>
+<body>
+<h1>ハウスの色くらべ</h1>
+<p class="note">
+  実際のハート画像と、なかま・敵を1体ずつ置いています。盤の背景（薄桃）も本番と同じです。<br>
+  いまの配色は「① いまの色」。ハートが内側のピンクに埋もれているのが分かります。
+</p>
+<div class="grid" id="grid"></div>
+
+<script>
+"use strict";
+
+// 本番と同じ比率(12/8/4/1フィート)。内側から2番目までを差し替える案を並べる。
+const PALETTES = [
+  { name: "① いまの色", desc: "外=ラベンダー / 内=ピンク。ハートと同系色で埋もれる。",
+    ice: "#fce4ec", outer: "#8f78b5", mid: "#fff8fb", inner: "#f48fb1", button: "#ffffff" },
+  { name: "② 青のハウス", desc: "実際のカーリングに近い青。ハートの桃色がいちばん際立つ。",
+    ice: "#eaf4fb", outer: "#5b8fc9", mid: "#ffffff", inner: "#a8d3ef", button: "#ffffff" },
+  { name: "③ 紫を濃くして内側を白へ", desc: "いまの雰囲気を残しつつ、内側を白にしてハートを浮かせる。",
+    ice: "#fce4ec", outer: "#7a5fae", mid: "#f6eefb", inner: "#c9aee6", button: "#ffffff" },
+  { name: "④ ミント", desc: "寒色でハートの桃と補色。氷らしさも出る。",
+    ice: "#e9f6f2", outer: "#4fae95", mid: "#ffffff", inner: "#a6ded0", button: "#ffffff" },
+  { name: "⑤ 空色 × クリーム", desc: "やわらかい配色。ハートのリボン(クリーム)とも喧嘩しない。",
+    ice: "#eef6fb", outer: "#7cb6dd", mid: "#fffdf6", inner: "#bfe0f2", button: "#ffffff" },
+  { name: "⑥ 藍 × 白", desc: "いちばん締まる。キャラの色が全部映える。暗めなので好み次第。",
+    ice: "#eceef6", outer: "#4a5a9e", mid: "#ffffff", inner: "#9aa8d8", button: "#ffffff" },
+  { name: "⑦ 灰紫（彩度を落とす）", desc: "紫は残したいが主張は抑えたい場合。ハートが主役になる。",
+    ice: "#f3eef4", outer: "#8b82a3", mid: "#fbf8fc", inner: "#c5bed4", button: "#ffffff" },
+  { name: "⑧ 紫 × 薄黄", desc: "内側を淡い黄にして、桃色のハートと色相をずらす。",
+    ice: "#fce4ec", outer: "#8f78b5", mid: "#fffdf5", inner: "#f2e3a8", button: "#ffffff" },
+];
+
+const heart = new Image();
+heart.src = "images/item/heart.png";
+const minari = new Image();
+minari.src = "images/characters/01_normal.png";
+const alba = new Image();
+alba.src = "images/characters/23_normal.png";
+
+const RATIO = 160 / 256;          // 画像の中でボールが占める割合(本番と同じ)
+const PIECE_R = 27, HOUSE_R = 230, VIEW_SCALE = 0.5391;
+
+function drawOne(cv, p) {
+  const dpr = 2;
+  const W = 460, H = 320;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.aspectRatio = `${W} / ${H}`;
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  g.fillStyle = p.ice; g.fillRect(0, 0, W, H);
+
+  // 格子(本番と同じ、キャラ直径ぶんの間隔)
+  const step = PIECE_R * 2 * VIEW_SCALE * 2.4;
+  g.strokeStyle = "rgba(255,255,255,0.5)"; g.lineWidth = 1;
+  g.beginPath();
+  for (let x = (W/2) % step; x < W; x += step) { g.moveTo(x, 0); g.lineTo(x, H); }
+  for (let y = (H/2) % step; y < H; y += step) { g.moveTo(0, y); g.lineTo(W, y); }
+  g.stroke();
+
+  const cx = W / 2, cy = H / 2;
+  const hR = 128;
+  for (const [r, col] of [[hR, p.outer], [hR*(2/3), p.mid], [hR*(1/3), p.inner], [hR*(1/12), p.button]]) {
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI*2); g.fillStyle = col; g.fill();
+  }
+
+  // ハート(本番と同じ比率:ハウス半径の1/8 × 1.35)
+  const hs = (hR / 8) * 1.35 * 2.2;
+  if (heart.complete) g.drawImage(heart, cx - hs/2, cy - hs/2, hs, hs);
+
+  // なかまと敵を1体ずつ。大きさは本番の比率(ハウス半径230 : キャラ半径27)に合わせる
+  const pr = hR * (PIECE_R / HOUSE_R);
+  const put = (img, x, y) => {
+    if (!img.complete) return;
+    const size = (pr * 2) / RATIO;
+    g.drawImage(img, x - size/2, y - size/2, size, size);
+  };
+  put(minari, cx - hR*0.42, cy + hR*0.34);
+  put(alba, cx + hR*0.46, cy - hR*0.3);
+}
+
+const grid = document.getElementById("grid");
+const cards = PALETTES.map((p) => {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<h2>${p.name}</h2><div class="desc">${p.desc}</div>`;
+  const cv = document.createElement("canvas");
+  card.appendChild(cv);
+  const sw = document.createElement("div");
+  sw.className = "swatches";
+  for (const c of [p.ice, p.outer, p.mid, p.inner]) {
+    const s = document.createElement("div");
+    s.className = "sw"; s.style.background = c; sw.appendChild(s);
+  }
+  card.appendChild(sw);
+  const code = document.createElement("div");
+  code.className = "code";
+  code.textContent = `氷 ${p.ice} / 外 ${p.outer} / 中 ${p.mid} / 内 ${p.inner}`;
+  card.appendChild(code);
+  grid.appendChild(card);
+  return { cv, p };
+});
+
+function drawAll() { for (const c of cards) drawOne(c.cv, c.p); }
+drawAll();
+for (const img of [heart, minari, alba]) img.addEventListener("load", drawAll);
+</script>
+</body>
+</html>
