@@ -48,8 +48,9 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 10px; white-space: nowrap;
   }
+  /* イントロ(60)より上に置く。イントロからでもメニューを開けるようにするため */
   #menuPanel {
-    position: fixed; top: 39px; right: 6px; z-index: 5;
+    position: fixed; top: 39px; right: 6px; z-index: 63;
     display: none; flex-direction: column; gap: 5px;
     padding: 7px; border-radius: 14px;
     background: rgba(255,248,251,0.97); box-shadow: 0 8px 22px rgba(80,30,50,0.24);
@@ -511,13 +512,14 @@
   body.ui-swapped #handBar { left: 7px; right: auto; }
   body.ui-swapped #throwTutorial { left: auto; right: 7px; }
   body.ui-swapped #handBar.hidden { transform: translateX(-18px); }
+  /* イントロ(60)からでも開けるよう上に置く。上端は右上のボタンを避けて空ける */
   #howToOverlay {
-    position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
-    padding: 14px; box-sizing: border-box; background: rgba(43,31,36,0.72); touch-action: pan-y;
+    position: fixed; inset: 0; z-index: 64; display: none; align-items: center; justify-content: center;
+    padding: 44px 14px 14px; box-sizing: border-box; background: rgba(43,31,36,0.72); touch-action: pan-y;
   }
   #howToOverlay.show { display: flex; }
   #howToPanel {
-    width: min(720px, 100%); max-height: calc(100vh - 28px); overflow-y: auto;
+    width: min(720px, 100%); max-height: calc(100vh - 58px); overflow-y: auto;
     border: 3px solid #f48fb1; border-radius: 20px; background: #fff8fb;
     box-shadow: 0 16px 46px rgba(43,31,36,0.34); color: #4a2133;
     font-family: 'DotGothic16', system-ui, sans-serif; -webkit-overflow-scrolling: touch;
@@ -560,7 +562,7 @@
   #howToPageLabel { text-align: center; color: #e91e63; font-size: 12px; letter-spacing: 3px; }
   #howToPrev:disabled { opacity: .35; }
   #characterBookOverlay {
-    position: fixed; inset: 0; z-index: 41; display: none; align-items: center; justify-content: center;
+    position: fixed; inset: 0; z-index: 64; display: none; align-items: center; justify-content: center;
     padding: 12px; box-sizing: border-box; background: rgba(43,31,36,.74); touch-action: none;
   }
   #characterBookOverlay.show { display: flex; }
@@ -577,7 +579,7 @@
   #characterBookLead.hidden { visibility: hidden; }
   /* トリック一覧 */
   #trickBookOverlay {
-    position: fixed; inset: 0; z-index: 41; display: none; align-items: center; justify-content: center;
+    position: fixed; inset: 0; z-index: 64; display: none; align-items: center; justify-content: center;
     padding: 8px; box-sizing: border-box; background: rgba(43,31,36,.74); touch-action: none;
   }
   #trickBookOverlay.show { display: flex; }
@@ -1910,7 +1912,8 @@ function updateSideInfoVisibility() {
 }
 
 // 右上のバーの出し方を、いまどの画面かで決める。
-//  ・イントロ中はサウンドだけ(「いろいろ」の中身はゲーム中のものなので隠す)
+//  ・イントロでも「いろいろ」は出す。ただし中の「あきらめる」は
+//    まだ始まっていないので隠す
 //  ・ランキングやゲームオーバーが出ているあいだは丸ごと隠す
 function syncTopBar() {
   const bar = document.getElementById("scenarioBar");
@@ -1920,7 +1923,8 @@ function syncTopBar() {
   const rankOpen = document.getElementById("rankingOverlay")?.classList.contains("show");
   const overOpen = document.getElementById("gameOver")?.classList.contains("show");
   bar.classList.toggle("hidden", Boolean(rankOpen || overOpen));
-  menuBtn.classList.toggle("hidden", Boolean(introOpen));
+  menuBtn.classList.remove("hidden");
+  document.getElementById("giveUpBtn")?.classList.toggle("hidden", Boolean(introOpen || overOpen));
   if (introOpen) bar.style.opacity = "1";   // イントロでは狙い中の薄さを持ち込まない
 }
 
