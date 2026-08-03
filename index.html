@@ -9,9 +9,11 @@
   html, body {
     --side-panel-width: 104px;
     --side-panel-height: 280px;
-    /* ソケットはキャラが小さくなったぶん細くする。チュートリアル側は文字が入るので
-       従来の幅のまま(以前は同じ変数を使い回していた) */
+    /* ソケットはキャラが小さくなったぶん細く・短くする。チュートリアル側は文字が
+       入るので従来のまま(以前は同じ変数を使い回していた)。
+       下辺は動かさず、上辺だけ下げたいので高さと位置を合わせて持つ */
     --socket-width: 66px;
+    --socket-height: 190px;
     margin: 0; padding: 0;
     background-color: #fce4ec;
     background-image:
@@ -100,12 +102,13 @@
     box-shadow: 0 2px 0 #9b8891, 0 3px 9px rgba(90,70,80,0.2);
   }
   #handBar {
-    position: fixed; right: 7px; top: calc(100% - 320px); bottom: auto;
+    /* 下辺は 100%-40px のまま。高さを縮めたぶん上辺だけ下がる */
+    position: fixed; right: 7px; top: calc(100% - 40px - var(--socket-height)); bottom: auto;
     transform: none;
     display: grid; grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); gap: 4px;
-    /* 各セルの中央に置く。ここが start だと、上下にゆらす余地が片側に寄ってしまう */
+    /* 各セルの中央に置く。ここが start だと、ゆらす余地が片側に寄ってしまう */
     place-items: center;
-    width: var(--socket-width); height: var(--side-panel-height); box-sizing: border-box;
+    width: var(--socket-width); height: var(--socket-height); box-sizing: border-box;
     padding: 6px 5px;
     border: 2px solid #f48fb1; border-radius: 15px;
     background: rgba(255,255,255,0.62);
@@ -650,7 +653,7 @@
   #characterBookPageLabel { text-align: center; color: #e91e63; font-size: 12px; }
   #characterBookPrev:disabled { opacity: .35; }
   @media (max-width: 390px) {
-    html, body { --side-panel-width: 92px; --socket-width: 60px; }
+    html, body { --side-panel-width: 92px; --socket-width: 60px; --socket-height: 178px; }
     #throwTutorial { padding: 7px 6px; font-size: 9px; }
     .howToPage { grid-template-columns: 1fr; }
     .howToShot { height: 84px; }
@@ -2931,7 +2934,12 @@ function physicsStep() {
       if (p.state !== "onboard") continue;
       const speed = Math.hypot(p.vx, p.vy);
       // 止まった石は、そのとき向いていた角度のまま置いておく(正立へは戻さない)
-      if (speed < CONFIG.SETTLE_SPEED) { p.vx = 0; p.vy = 0; continue; }
+      if (speed < CONFIG.SETTLE_SPEED) {
+        // 止まった瞬間を控える。リウ/ヒロイベオの範囲を、ここから広げて見せる
+        if (p.vx !== 0 || p.vy !== 0) p.rangeAppearAt = performance.now();
+        p.vx = 0; p.vy = 0;
+        continue;
+      }
 
       // 回頭:速いほど弱く(終盤に曲がる)、回転量にそのまま比例して曲がる(弱回転=微カーブ、強回転=大カーブ)
       // curveSpeedEase<1 は速度による曲がり抑制を弱める(=速いショットでも曲がる。アウネ)
@@ -2963,7 +2971,11 @@ function physicsStep() {
       }
 
       const ns = Math.hypot(p.vx, p.vy);
-      if (ns < CONFIG.SETTLE_SPEED) { p.vx = 0; p.vy = 0; }
+      // ここが「滑っていた石が止まる」瞬間。リウ/ヒロイベオの範囲はここから広げる
+      if (ns < CONFIG.SETTLE_SPEED) {
+        if (p.vx !== 0 || p.vy !== 0) p.rangeAppearAt = performance.now();
+        p.vx = 0; p.vy = 0;
+      }
 
       p.x += p.vx * k;
       p.y += p.vy * k;
@@ -3650,42 +3662,52 @@ function updateSocketDrift(delta) {
   if (!bar || bar.classList.contains("hidden")) return;
   const cards = [...bar.querySelectorAll(".handCard")].filter(c => !c.classList.contains("carrying"));
   const dt = Math.min(delta, 0.05);
-  const bounds = [];
+  // セルの中だけで動かすのをやめ、ソケットの箱ぜんたいを1つの器として扱う。
+  // イントロの背景と同じで、壁と石どうしにぶつかって弾けながら滑り続ける。
+  // 位置は「箱の左上を原点とした中心座標」で持ち、並びの本来の位置との差を
+  // transform に入れる(掴む判定は変形後の位置で行われるのでそのまま動く)。
+  const W = bar.clientWidth, H = bar.clientHeight;
+  const items = [];
   for (const card of cards) {
     const index = card.dataset.index;
-    // 各石は自分のセル内だけを動く。セル中心を原点とした相対座標で扱う。
-    // 縦の余地はセル(4行ぶんの1つ)の高さから測る。決め打ちの4pxだと
-    // 上下にほとんど動けず「左右にしか滑っていない」ように見えていた。
-    const cellW = card.parentElement.clientWidth;
-    const rowH = (card.parentElement.clientHeight - 12) / 4;  // gap 4px × 3
-    const limitX = Math.max(0, (cellW - card.offsetWidth) / 2 - 3);
-    const limitY = Math.max(0, (rowH - card.offsetHeight) / 2 - 2);
+    const r = card.offsetWidth / 2;
+    const homeX = card.offsetLeft + r, homeY = card.offsetTop + r;
     let s = socketDrift.get(index);
     if (!s) {
       // 摩擦0でずっと同じ速さで滑り続ける(減速しない)。速度はかなりゆっくり。
-      // 向きは全方向からランダムに選ぶ(縦だけ遅くしない)。
       const a = Math.random() * Math.PI * 2;
       const speed = 5.5; // px/秒
-      s = { x: (Math.random() * 2 - 1) * limitX * 0.6,
-            y: (Math.random() * 2 - 1) * limitY * 0.6,
-            vx: Math.cos(a) * speed, vy: Math.sin(a) * speed };
+      s = { x: homeX, y: homeY, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed };
       socketDrift.set(index, s);
     }
     s.x += s.vx * dt; s.y += s.vy * dt;
-    if (s.x < -limitX) { s.x = -limitX; s.vx = Math.abs(s.vx); }
-    if (s.x > limitX) { s.x = limitX; s.vx = -Math.abs(s.vx); }
-    if (s.y < -limitY) { s.y = -limitY; s.vy = Math.abs(s.vy); }
-    if (s.y > limitY) { s.y = limitY; s.vy = -Math.abs(s.vy); }
-    bounds.push({ card, s, limitX, limitY });
+    const minX = r + 2, maxX = W - r - 2, minY = r + 2, maxY = H - r - 2;
+    if (s.x < minX) { s.x = minX; s.vx = Math.abs(s.vx); }
+    if (s.x > maxX) { s.x = maxX; s.vx = -Math.abs(s.vx); }
+    if (s.y < minY) { s.y = minY; s.vy = Math.abs(s.vy); }
+    if (s.y > maxY) { s.y = maxY; s.vy = -Math.abs(s.vy); }
+    items.push({ card, s, r, homeX, homeY });
   }
-  // 石同士のぶつかり(同じ行に複数ないので、上下の隣とだけ簡易に反発させる)
-  for (let i = 0; i < bounds.length - 1; i++) {
-    const a = bounds[i], b = bounds[i + 1];
-    const gap = Math.abs((a.s.y + a.card.offsetHeight) - b.s.y);
-    if (gap < 2) { a.s.vy = -Math.abs(a.s.vy); b.s.vy = Math.abs(b.s.vy); }
+  // 石どうしのぶつかり。重さは同じとみなして、ぶつかった向きの速度だけ入れ替える
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const a = items[i], b = items[j];
+      const dx = b.s.x - a.s.x, dy = b.s.y - a.s.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = a.r + b.r;
+      if (dist <= 0.001 || dist >= minDist) continue;
+      const nx = dx / dist, ny = dy / dist;
+      const overlap = minDist - dist;
+      a.s.x -= nx * overlap * 0.5; a.s.y -= ny * overlap * 0.5;
+      b.s.x += nx * overlap * 0.5; b.s.y += ny * overlap * 0.5;
+      const rvn = (b.s.vx - a.s.vx) * nx + (b.s.vy - a.s.vy) * ny;
+      if (rvn >= 0) continue;
+      a.s.vx += rvn * nx; a.s.vy += rvn * ny;
+      b.s.vx -= rvn * nx; b.s.vy -= rvn * ny;
+    }
   }
-  for (const { card, s } of bounds) {
-    card.style.transform = `translate(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px)`;
+  for (const { card, s, homeX, homeY } of items) {
+    card.style.transform = `translate(${(s.x - homeX).toFixed(2)}px, ${(s.y - homeY).toFixed(2)}px)`;
   }
 }
 
@@ -4080,13 +4102,24 @@ function render() {
       : (p.mods.enemyAttractor ? CONFIG.HIROIBEO_RANGE * p.mods.attractRangeMult : 0))
       * abilityRangeScale(p);
     if (!radius) continue;
-    // 破線の縁取りはやめ、外へ向かってふんわり消える色だけで範囲を示す
-    const rr = radius * view.scale;
+    // 止まった瞬間から一気に広がって、少し行き過ぎてから収まる(能力が発動した感じ)
+    const OPEN_MS = 260;
+    const t = clamp((performance.now() - (p.rangeAppearAt ?? 0)) / OPEN_MS, 0, 1);
+    const eased = t >= 1 ? 1
+      : 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);  // 少しオーバーシュートする
+    const rr = radius * view.scale * eased;
+    if (rr <= 0.5) continue;
+    // 広がりきるまでは少し濃く出して、勢いを感じさせる
+    const boost = 1 + (1 - t) * 0.8;
     const silence = p.mods.silenceEnemyAbilities;
+    const tone = (alpha) => silence
+      ? `rgba(64,180,215,${Math.min(1, alpha * boost)})`
+      : `rgba(255,110,170,${Math.min(1, alpha * boost)})`;
+    // 破線の縁取りはやめ、外へ向かってふんわり消える色だけで範囲を示す
     const grad = ctx.createRadialGradient(s.x, s.y, rr * 0.2, s.x, s.y, rr);
-    grad.addColorStop(0, silence ? "rgba(64,180,215,0.34)" : "rgba(255,110,170,0.30)");
-    grad.addColorStop(0.68, silence ? "rgba(64,180,215,0.20)" : "rgba(255,110,170,0.17)");
-    grad.addColorStop(1, silence ? "rgba(64,180,215,0)" : "rgba(255,110,170,0)");
+    grad.addColorStop(0, tone(0.34));
+    grad.addColorStop(0.68, tone(silence ? 0.20 : 0.17));
+    grad.addColorStop(1, tone(0));
     ctx.beginPath();
     ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
     ctx.fillStyle = grad;
