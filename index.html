@@ -34,11 +34,15 @@
   #hud .label { opacity: 0.6; font-size: 10px; margin-right: 2px; }
   /* 4つのボタンを2段2列で、すべて同じ大きさに揃える */
   /* 右上の4ボタン。左上のスコア表示と取り合いになるので、必要な幅だけに絞る */
-  /* 右上はサウンドと「いろいろ」の2つだけ。中身はメニューに畳んで盤を広く使う */
+  /* 右上は「いろいろ」とサウンドの2つだけ。中身はメニューに畳んで盤を広く使う。
+     サウンドはイントロでも同じ場所に出したいので、イントロ(60)より上に置く。
+     ランキングやゲームオーバーが出ているあいだは syncTopBar が丸ごと隠す。 */
   #scenarioBar {
-    position: fixed; top: 6px; right: 6px; z-index: 4;
+    position: fixed; top: 6px; right: 6px; z-index: 62;
     display: flex; gap: 4px;
   }
+  #scenarioBar.hidden { display: none; }
+  #menuBtn.hidden { display: none; }
   #scenarioBar .btn {
     height: 26px; width: 74px; padding: 0 3px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
@@ -285,7 +289,7 @@
   }
   /* ---------- ランキング ---------- */
   #rankingOverlay {
-    position: fixed; inset: 0; z-index: 61; display: none;
+    position: fixed; inset: 0; z-index: 70; display: none;
     align-items: center; justify-content: center; padding: 10px; box-sizing: border-box;
     background: rgba(43,31,36,.74); font-family: 'DotGothic16', system-ui, sans-serif;
   }
@@ -390,13 +394,6 @@
   #rankText { font-size: 12px; white-space: nowrap; }
   /* 見出しと数値を左右に振り分け、数値は右揃えで桁が増えても位置が動かない */
   #scorePanel > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  body.ui-swapped #allOutBtn { right: auto; left: 7px; }
-  /* デバッグ用ボタン:ソケットの真下に仮置き(最終的には削除する) */
-  #allOutBtn {
-    position: fixed; right: 7px; top: calc(100% - 34px); z-index: 4;
-    width: var(--side-panel-width); box-sizing: border-box; text-align: center;
-    font-size: 9px; padding: 5px 2px; opacity: 0.8;
-  }
   #scorePanel .label { opacity: 0.6; font-size: 11px; margin-right: 5px; }
   /* スコアは6桁ぶんの幅を最初から確保して、桁が増えても枠が広がらないようにする */
   #scorePanel .scoreValue { display: inline-block; min-width: 6ch; text-align: right; }
@@ -696,8 +693,8 @@
 <div id="dangerAlert" aria-live="polite"></div>
 <div id="abilityInfo" aria-live="polite"></div>
 <div id="scenarioBar">
-  <button class="btn" id="soundToggleBtn" aria-pressed="true">サウンド ON</button>
   <button class="btn" id="menuBtn" aria-expanded="false">いろいろ</button>
+  <button class="btn" id="soundToggleBtn" aria-pressed="true">サウンド ON</button>
 </div>
 <div id="menuPanel">
   <button class="btn" id="howToBtn">あそびかた</button>
@@ -705,8 +702,6 @@
   <button class="btn" id="characterBookBtn">キャラクター</button>
   <button class="btn" id="giveUpBtn">あきらめる</button>
 </div>
-<!-- デバッグ用。最終的には削除する -->
-<button class="btn" id="allOutBtn" aria-pressed="false">デバッグ OFF</button>
 <div id="handBar" aria-label="なかまの手札"></div>
 <div id="sideInfo">
   <div id="scorePanel">
@@ -1810,6 +1805,8 @@ function buildSurvivalGame() {
   game.score.characterUses = {};
   game.scoreSubmitted = false; // 新しいゲームなので、また送れるようにする
   document.getElementById("giveUpBtn")?.classList.remove("hidden");
+  document.getElementById("gameOver")?.classList.remove("show");
+  syncTopBar();
   game.lastRankName = null; // 初回のランク表示では昇格演出を出さない
   game.hitStopFrames = 0;
   game.fxRings = [];
@@ -1910,6 +1907,21 @@ function updateSideInfoVisibility() {
   if (bar) bar.style.opacity = dim;
   if (side) side.style.opacity = dim;
   if (danger) danger.style.opacity = aiming ? "0.12" : "";  // 未指定に戻してCSSの表示制御へ返す
+}
+
+// 右上のバーの出し方を、いまどの画面かで決める。
+//  ・イントロ中はサウンドだけ(「いろいろ」の中身はゲーム中のものなので隠す)
+//  ・ランキングやゲームオーバーが出ているあいだは丸ごと隠す
+function syncTopBar() {
+  const bar = document.getElementById("scenarioBar");
+  const menuBtn = document.getElementById("menuBtn");
+  if (!bar || !menuBtn) return;
+  const introOpen = document.getElementById("intro")?.classList.contains("show");
+  const rankOpen = document.getElementById("rankingOverlay")?.classList.contains("show");
+  const overOpen = document.getElementById("gameOver")?.classList.contains("show");
+  bar.classList.toggle("hidden", Boolean(rankOpen || overOpen));
+  menuBtn.classList.toggle("hidden", Boolean(introOpen));
+  if (introOpen) bar.style.opacity = "1";   // イントロでは狙い中の薄さを持ち込まない
 }
 
 function updateThrowTutorial() {
@@ -2656,6 +2668,7 @@ function showGameOver(enemy) {
     topHtml + bestHtml;
   document.getElementById("gameOver").classList.add("show");
   document.getElementById("giveUpBtn")?.classList.add("hidden");
+  syncTopBar();
   updateRankingBox(score, rank);
   // 盤面がまだ描かれているうちにシェア画像を用意する(共有はタップ直後に呼ぶ必要があるため)
   prepareShareImage(score, rank);
@@ -4403,6 +4416,7 @@ function updateDangerAlert() {
 }
 
 function updateHUD() {
+  syncTopBar();   // 画面が切り替わっても右上のバーが追従するよう、毎フレーム見る
   const onboard = game.pieces.filter(p => p.state === "onboard" && p.entered).length;
   const enemies = game.pieces.filter(p => p.role === "enemy" && p.state === "onboard").length;
   const phaseNames = { aim: "投球", playerMoving: "ショット中", enemyMoving: "敵接近", gameOver: "敗北" };
@@ -4548,28 +4562,6 @@ function bindResetButtons() {
     const score = calculateScore();
     document.getElementById("rankingNameRow")?.classList.add("hidden");
     submitScore(score, currentScoreRank(score.total));
-  });
-}
-
-// B対応:全部出しモードのトグル。ONで段階アンロックを無効化し最初から全種出す。
-// 端末に設定を保存し、切り替え時はゲームを作り直す。
-function bindAllOutButton() {
-  const button = document.getElementById("allOutBtn");
-  if (!button) return;
-  const saved = localStorage.getItem("sc_allOut");
-  if (saved === "1") game.allOutMode = true;
-  const sync = () => {
-    button.textContent = game.allOutMode ? "デバッグ ON" : "デバッグ OFF";
-    button.setAttribute("aria-pressed", game.allOutMode ? "true" : "false");
-    button.classList.toggle("active", game.allOutMode);
-  };
-  sync();
-  button.addEventListener("pointerdown", (e) => {
-    e.stopPropagation(); e.preventDefault();
-    game.allOutMode = !game.allOutMode;
-    localStorage.setItem("sc_allOut", game.allOutMode ? "1" : "0");
-    sync();
-    buildSurvivalGame();
   });
 }
 
@@ -5125,6 +5117,7 @@ function stopIntroAnim() {
 function closeIntro() {
   document.getElementById("intro")?.classList.remove("show");
   stopIntroAnim();
+  syncTopBar();
 }
 
 // ゲームオーバーの「おわる」から戻ってくる。BGMもイントロの曲に戻す。
@@ -5134,6 +5127,7 @@ function openIntro() {
   resetIntroSliders();
   startIntroAnim();
   setBgmTrack(BGM_INTRO_SRC);
+  syncTopBar();
 }
 
 function bindIntro() {
@@ -5166,6 +5160,7 @@ function openRanking() {
   const best = document.getElementById("rankingBest");
   if (!overlay || !list || !best) return;
   overlay.classList.add("show");
+  syncTopBar();
   best.textContent = `じこベスト ${loadBestScore()}`;
   if (!RANKING_ENDPOINT) {
     list.innerHTML = `<div class="rankingNote">ランキングは まだ つかえません</div>`;
@@ -5256,7 +5251,7 @@ function bindMenu() {
 
 function bindRankingOverlay() {
   const overlay = document.getElementById("rankingOverlay");
-  const close = () => overlay?.classList.remove("show");
+  const close = () => { overlay?.classList.remove("show"); syncTopBar(); };
   document.getElementById("rankingClose")?.addEventListener("click", (e) => { e.stopPropagation(); close(); });
   overlay?.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
@@ -5274,7 +5269,6 @@ bindHowTo();
 bindCharacterBook();
 bindTrickBook();
 bindSoundButton();
-bindAllOutButton(); // 保存された全部出しモードをbuildSurvivalGameより前に反映
 bindMenu();
 bindRankingOverlay();
 buildSurvivalGame();
