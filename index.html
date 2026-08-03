@@ -1657,6 +1657,10 @@ function enemyAbilitySuppressed(enemy) {
 // バーニ進化が飛ばした別キャラは inheritsIgnoreAbilities を受け継いで無敵になる。
 function barniBypassesEnemy(attacker, target) {
   if (attacker?.role !== "player" || !target) return false;
+  // isCurrentShot と indirectFromShot は次の投球まで残る印なので、それだけを見ると
+  // 投げ終わったあとの敵の接近中まで無敵が続いてしまう。自分の投球が動いている
+  // 最中(playerMoving)に限る。
+  if (game.phase !== "playerMoving") return false;
   if (attacker.inheritsIgnoreAbilities) return true;
   if (!attacker.mods.ignoreEnemyAbilities) return false;
   return Boolean(attacker.isCurrentShot || attacker.indirectFromShot);
