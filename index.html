@@ -736,7 +736,7 @@
   <div class="tutorialStep" id="tutorialThrow"><b class="tutorialTitle">③ なげる</b><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">スピード</span><span class="gaugeVal" id="speedReadout">―</span></div><div class="speedWrap"><div class="vBar"><div class="vFill" id="speedBarFill"></div><span class="vArrow">↑</span></div></div></div><div class="gaugeBlock"><div class="gaugeRow"><span class="gaugeName">カーブ</span><span class="gaugeVal" id="curveReadout">まがらない</span></div><div class="bar2 curveBar"><div class="fill2 curveFill" id="curveBarFill"></div></div></div></div>
   </div>
 </div>
-<div id="howToOverlay" class="show" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
+<div id="howToOverlay" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
   <div id="howToPanel">
     <div class="howToHeader"><h2 id="howToTitle">遊び方</h2><button class="btn" id="howToClose" aria-label="遊び方を閉じる">×</button></div>
     <p class="howToLead">ハウスの まんなか(ボタン)の 💝に 近づけるな！</p>
@@ -789,7 +789,9 @@ const CONFIG = {
   ENEMY_SPAWN_RADIUS: 290, // 拡大後もスマホ画面内に収まる外周配置
   ENEMY_ADVANCE_DISTANCE: 32, // 1ターンに中心へ進む基準距離(px)
   ENEMY_PRESSURE_MULT: 1.35, // 最も中心に近い敵だけ少し先行させ、敵同士が輪状に詰まるのを防ぐ
-  HIROIBEO_ATTRACTION: 0.68,
+  // 1未満なら「中央へ向かう力のほうが強い」。0.68だと引き寄せが勝ちすぎて
+  // 敵がヒロイベオに吸い付いたまま進まなくなるため、0.42まで弱めた
+  HIROIBEO_ATTRACTION: 0.42,
   HIROIBEO_RANGE: 150,   // ヒロイベオの直径約2個ぶんだけ強く引く
   RIU_SILENCE_RADIUS: 130,
   WUYONG_MOVE_MULT: 1.55,
@@ -1632,10 +1634,13 @@ function abilityRangeScale(piece) {
   return Math.min(1, piece.mods.radiusScale ?? 1);
 }
 
+// リウの封印は、盤に落ち着いてからだけ効く。飛んでいる最中も効くと
+// 「投げた先の敵の能力を全部消す」ことになり、バーニの上位互換になってしまう。
 function enemyAbilitySuppressed(enemy) {
   if (!enemy || enemy.role !== "enemy") return false;
   return game.pieces.some(piece =>
     piece.role === "player" && piece.state === "onboard" && piece.mods.silenceEnemyAbilities &&
+    piece.vx === 0 && piece.vy === 0 &&
     Math.hypot(piece.x - enemy.x, piece.y - enemy.y)
       <= CONFIG.RIU_SILENCE_RADIUS * piece.mods.silenceRadiusMult * abilityRangeScale(piece)
   );
@@ -3813,37 +3818,51 @@ function drawTrajectoryGuide(aim, shooterRadius) {
   const originX = stone.x, originY = stone.y;
   const movingRadius = pieceRadius(stone);
 
-  // 次に当たる石があればそこまで、なければ一定長で描く
-  const next = rayFirstHit(originX, originY, dirX, dirY, movingRadius, [stone.uid]);
-  const drawLen = next ? next.contactDistance : 170;
+  // 矢印の長さは、次に当たる石までの距離ではなく一定にする。
+  // 距離に合わせると、石が近いときに矢印がほとんど描けず向きが読めないため。
+  // 石の中心から始めて上に重ねるので、詰まっていても向きだけは必ず見える。
+  const drawLen = movingRadius * 3.2;
   const from = toScreen(originX, originY);
   const to = toScreen(originX + dirX * drawLen, originY + dirY * drawLen);
 
   ctx.save();
-  ctx.lineWidth = 2;
   const color = "0,105,110";
-  ctx.setLineDash([7, 5]);
-  ctx.strokeStyle = `rgba(${color},0.9)`;
-  ctx.beginPath();
-  ctx.moveTo(from.x, from.y);
-  ctx.lineTo(to.x, to.y);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
   const arrowAngle = Math.atan2(to.y - from.y, to.x - from.x);
-  ctx.fillStyle = `rgba(${color},0.95)`;
-  ctx.beginPath();
-  ctx.moveTo(to.x, to.y);
-  ctx.lineTo(to.x - Math.cos(arrowAngle - 0.45) * 10, to.y - Math.sin(arrowAngle - 0.45) * 10);
-  ctx.lineTo(to.x - Math.cos(arrowAngle + 0.45) * 10, to.y - Math.sin(arrowAngle + 0.45) * 10);
-  ctx.closePath();
-  ctx.fill();
+  const head = (size) => {
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - Math.cos(arrowAngle - 0.45) * size, to.y - Math.sin(arrowAngle - 0.45) * size);
+    ctx.lineTo(to.x - Math.cos(arrowAngle + 0.45) * size, to.y - Math.sin(arrowAngle + 0.45) * size);
+    ctx.closePath();
+  };
+  // キャラの絵に重ねるので、白い縁を先に敷いて線を浮かせる
+  ctx.lineCap = "round";
+  ctx.setLineDash([7, 5]);
+  ctx.strokeStyle = "rgba(255,255,255,0.92)";
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(255,255,255,0.92)";
+  ctx.lineWidth = 5; ctx.lineJoin = "round";
+  head(11); ctx.stroke();
+
+  ctx.setLineDash([7, 5]);
+  ctx.strokeStyle = `rgba(${color},0.95)`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = `rgba(${color},1)`;
+  head(11); ctx.fill();
   ctx.restore();
 }
 
 const ROLE_COLOR = { player: "#6fa8ff", enemy: "#d94f4f", wall: "#8a8078" };
 
+// モコクンの矢印は石の上に重ねたいので、いったん控えてピースの後で描く
+let pendingTrajectoryGuide = null;
+
 function render() {
+  pendingTrajectoryGuide = null;
   const w = window.innerWidth, h = window.innerHeight;
   ctx.clearRect(0, 0, w, h);
 
@@ -3976,9 +3995,9 @@ function render() {
 
   if (!a && game.lockedAim) {
     drawAimDirectionLine(game.lockedAim);
-    if (shouldShowTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, selectedCharacter)) {
-      drawTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale);
-    }
+    // 飛ぶ方向の矢印は石の上に重ねたいので、ピースを描いたあとにまとめて出す
+    pendingTrajectoryGuide = shouldShowTrajectoryGuide(game.lockedAim, CONFIG.PIECE_RADIUS * launcherRadiusScale, selectedCharacter)
+      ? { aim: game.lockedAim, r: CONFIG.PIECE_RADIUS * launcherRadiusScale } : null;
     // 発射位置の下の案内文は表示しない(チュートリアル側で説明しているため)
   }
 
@@ -3988,9 +4007,8 @@ function render() {
   if (a) {
     const pushing = a.state === "push";
     drawAimDirectionLine(a);
-    if (shouldShowTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, selectedCharacter)) {
-      drawTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale);
-    }
+    pendingTrajectoryGuide = shouldShowTrajectoryGuide(a, CONFIG.PIECE_RADIUS * launcherRadiusScale, selectedCharacter)
+      ? { aim: a, r: CONFIG.PIECE_RADIUS * launcherRadiusScale } : null;
 
     // 引っ張りの線は、狙いのガイドとちょうど一直線(反対向き)になるように描く。
     // 指の実際の位置ではなく、狙い方向の真後ろへ「引いた長さ」ぶん伸ばす。
@@ -4143,6 +4161,11 @@ function render() {
     const dimOutside = game.aim !== null;
     drawPiece(drawX, drawY, r, p.color ?? ROLE_COLOR[p.role], drawRot, alpha, p.mods.partType, p.icon,
       p.role === "enemy", pieceImageName(p), dimOutside);
+  }
+
+  // モコクンの矢印はここで描く。石の上に重なるので、詰まっていても向きが読める
+  if (pendingTrajectoryGuide) {
+    drawTrajectoryGuide(pendingTrajectoryGuide.aim, pendingTrajectoryGuide.r);
   }
 
   ctx.restore(); // 衝突演出の変換を解除
@@ -4760,6 +4783,7 @@ function drawHowToScene(canvasEl, time = 0) {
 
 // 遊び方を開いている間だけ、④⑤のコマ送りを回す。閉じたら止める。
 let howToAnimHandle = null;
+let openHowTo = null;   // bindHowTo が入れる。「はじめる」から遊び方を開くのに使う
 function startHowToAnim() {
   stopHowToAnim();
   const begin = performance.now();
@@ -4797,6 +4821,7 @@ function bindHowTo() {
   };
   const open = () => { page = 0; overlay.classList.add("show"); renderPage(); };
   const close = () => { overlay.classList.remove("show"); stopHowToAnim(); };
+  openHowTo = open;   // 「はじめる」からも開けるようにする
   openButton.addEventListener("click", (e) => { e.stopPropagation(); open(); });
   closeButton.addEventListener("click", (e) => { e.stopPropagation(); close(); });
   prevButton.addEventListener("click", (e) => { e.stopPropagation(); if (page > 0) { page--; renderPage(); } });
@@ -5150,6 +5175,7 @@ function bindIntro() {
     closeIntro();
     unlockAudio?.();
     setBgmTrack(BGM_GAME_SRC);   // イントロはメイン1、ゲームはメイン2
+    openHowTo?.();               // 遊び方はゲームに入るときに出す(イントロには重ねない)
   });
   document.getElementById("introRankingBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
