@@ -1586,9 +1586,13 @@ function spawnEnemyWave() {
   // 初期は3体、10ターンごとに1体ずつ増える。ブランク(全滅)再配置でも現在の解禁数で並べる。
   // ランチャーは画面下(world yが正)なのでy<0側=上半分。半円の弧(左→上→右)を θ=π+t*π で辿り、
   // 両端の真横に寄りすぎないよう t=(i+0.5)/N で内側に振る。各タイプ1体ずつ配置される。
+  // 立ち位置と種類の対応が固定だと「ウーヨンは必ず中央から突っ込む」「デロルスは
+  // 必ず端で出遅れる」といった、能力とは関係ない有利/不利が毎回ついてしまう。
+  // 均等に並べるのはそのままに、どの位置に誰が入るかだけ毎回シャッフルする。
   const N = unlockedEnemies().length;
+  const slots = shuffleArray(Array.from({ length: N }, (_, i) => i));
   for (let i = 0; i < N; i++) {
-    const t = (i + 0.5) / N;
+    const t = (slots[i] + 0.5) / N;
     const angle = Math.PI + t * Math.PI;
     spawnEnemy(i, angle);
   }
